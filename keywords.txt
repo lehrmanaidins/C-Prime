@@ -1,0 +1,46 @@
+// Type System
+type
+alias
+const
+mutable
+primitive
+reference
+struct
+enum
+
+// Functions / Contracts
+function
+return
+
+requires
+ensures
+result
+old
+
+// Control Flow
+if
+else
+switch
+case
+for
+foreach
+do
+while
+continue
+break
+
+// Boolean
+true
+false
+
+import
+unsafe
+
+null
+void
+
+// Function Attributes
+@pure
+@entry
+@critical
+@interrupt

@@ -1,0 +1,10 @@
+
+function main() {
+    println("Hello, C-Prime!");
+
+    primitive uint32 x = 1000;
+    primitive uint64 y = widen_cast<uint64>(x);
+
+    println(x);
+    println(y);
+}
