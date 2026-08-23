@@ -4,9 +4,13 @@ alias
 const
 mutable
 primitive
-reference
 struct
 enum
+
+// Reserved Data Types
+reference
+array
+list
 
 // Functions / Contracts
 function
@@ -26,6 +30,8 @@ for
 foreach
 do
 while
+loop
+limit
 continue
 break
 

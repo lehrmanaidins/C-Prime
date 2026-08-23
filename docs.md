@@ -365,6 +365,64 @@ enum Status : uint8 {
 }
 ```
 
+### Memory
+
+#### References
+
+&emsp;References in C-Prime are declared with the `reference` keyword with the referenced type inside of angled brackets `< >` and are a way to represent an alias to an existing variable.
+
+&emsp;A value is converted to a reference type using the `reference(T value)` function, where `T` is the type of the value being referenced and will return a reference of type `reference<T>`.
+
+```cprime
+primitive uint32 a = 10;
+reference<primitive uint32> b = reference(a); // b is a reference to a
+```
+
+&emsp;By default, references in C-Prime immutable; meaning the cannot be assigned to refer to a new variable after initialization. References can be made mutable by using the `mutable` keyword, just like other variables.
+
+```cprime
+primitive uint32 a = 10;
+primitive uint32 b = 20;
+
+reference<primitive uint32> r1 = reference(a); // `r1` is an immutable reference to `a`
+r1 = reference(b); // ERROR (`r1` cannot be reassigned because it is an immutable reference)
+
+mutable reference<primitive uint32> r2 = reference(a); // `r2` is a mutable reference to `a`
+r2 = reference(b); // `r2` can be reassigned to refer to a new variable because `r2` is mutable
+```
+
+&emsp;A reference must always be initialized when it is declared, and it cannot be null. This ensures that a reference always refers to a valid variable. 
+
+```cprime
+reference<primitive uint32> a; // ERROR (References must be initialized)
+```
+
+&emsp;C-Prime references and the variables they reference have independent mutability. You can have an immutable reference to an immutable variable, immutable references to mutable variables, mutable references to immutable variables, mutable references to mutable variables.
+
+&emsp;An immutable reference cannot be reassigned to refer to another variable after it has been initialized. Only mutable references can be reassigned to refer to different variables.
+
+```cprime
+primitive uint32 a = 10;
+primitive uint32 b = 20;
+mutable primitive uint32 c = 30;
+mutable primitive uint32 d = 40;
+
+reference<primitive uint32> ra = reference(a); // Immutable reference to an immutable variable
+reference <mutable primitive uint32> rc = reference(c); // Immutable reference to a mutable variable
+mutable reference<primitive uint32> r3 = reference(a); // `r3` is a mutable reference to an immutable variable
+mutable reference<mutable primitive uint32> r4 = reference(c); // `r4` is a mutable reference to a mutable variable
+```
+
+&emsp;A reference can be refer to a mutable variable but typed as a reference to an immutable variable, meaning the reference itself cannot be used to modify the value of the variable it refers to.
+
+&emsp;In other words, a `reference<mutable T>` can be implicitly converted to a `reference<const T>`, allowing an reference to a mutable variable to be treated as a reference to an immutable variable.
+
+```cprime
+mutable primitive uint32 a = 10;
+reference<primitive uint32> ra = reference(a); // Immutable reference to a mutable variable that cannot be used to modify the value of the variable it refers to
+reference <primitive const uint32> ra = reference(a); // Same as above, `const` is just optionally added.
+```
+
 ## Functions
 
 ### Naming Conventions
@@ -473,6 +531,8 @@ primitive uint32 v = foo(u); // ERROR (Cannot implicitly convert a value of type
 
 ### Function Pass-by-Value and Pass-by-Reference
 
+#### Pass-by-Value
+
 &emsp;By default, C-Prime functions pass arguments by value. This means that a copy of the argument is made and passed to the function. Changes made to the parameter inside the function do not affect the original argument.
 
 ```cprime
@@ -489,20 +549,85 @@ primitive uint32 y = increment(x); // OK (Calls the function increment with a va
 primitive bool is_equal = (x == y); // is_equal is false because x is still 42 and y is 43
 ```
 
+#### Pass-by-Reference
+
 &emsp;To pass an argument by reference, the `reference` keyword must be used in the function parameter declaration. This allows the function to modify the original argument.
 
 ```cprime
-function increment(primitive reference uint32 a) -> primitive uint32 {
+function increment(primitive mutable reference uint32 a) -> primitive uint32 {
     a += 1; // Increments the value of a
     return a; // Returns the incremented value
 }
 ```
 
 ```cprime
-primitive uint32 x = 42;
+primitive mutable uint32 x = 42;
 primitive uint32 y = increment(x); // OK (Calls the function increment with a value of type primitive uint32)
 
 primitive bool is_equal = (x == 43); // is_equal is true because x has been modified to 43 by the increment function
+```
+
+### Function Return-by-Value and Return-by-Reference
+
+#### Return-by-Value
+
+&emsp;By default, C-Prime functions return values by value. This means that a copy of the return value is made and returned to the caller. Changes made to the returned value do not affect the original value.
+
+```cprime
+function get_value(primitive uint32 a) -> primitive uint32 {
+    return a; // Returns a copy of the argument
+}
+```
+
+```cprime
+primitive uint32 x = 42;
+primitive uint32 y = get_value(x); // OK (Returns a copy of x)
+
+y += 1; // Modifies y, but x remains unchanged
+primitive bool is_equal = (x == 42); // is_equal is true because x has not been modified
+```
+
+&emsp;A function can be passed a reference to a variable, but return a copy of the referenced value.
+
+```cprime
+function get_value_from_reference(primitive reference uint32 a) -> primitive uint32 {
+    return a; // Returns a copy of the referenced value
+}
+```
+
+```cprime
+primitive uint32 x = 42;
+primitive uint32 y = get_value_from_reference(x); // OK (Returns a copy of the referenced value)
+
+y += 1; // Modifies y, but x remains unchanged
+primitive bool is_equal = (x == 42); // is_equal is true because x has not been modified
+```
+
+#### Return-by-Reference
+
+&emsp;To return a value by reference, the `reference` keyword must be used in the return type declaration.
+
+```cprime
+function get_reference(primitive reference uint32 a) -> primitive reference uint32 {
+    return a; // Returns a reference to the argument
+}
+```
+
+```cprime
+primitive uint32 x = 42;
+primitive reference uint32 y = get_reference(x); // OK (Returns a reference to x)
+
+y += 1; // Modifies x through the reference y
+primitive bool is_equal = (x == 43); // is_equal is true because x has been modified through y
+```
+
+&emsp;Only a function's arguments that are passed by reference can be returned by reference. Returning a reference to a local variable is not allowed, as it would result in a dangling reference.
+
+```cprime
+function get_local_reference() -> primitive reference uint32 {
+    primitive uint32 local = 42;
+    return local; // Error: Returning a reference to a local variable is not allowed
+}
 ```
 
 ### Function Overloading
@@ -561,3 +686,149 @@ function increment(primitive uint32 a) -> primitive uint32 b
     return a + 1;
 }
 ```
+
+## Control Flow
+
+### Conditional Statements
+
+&emsp;Pretty much all control flow statements in C-Prime are similar to those in C and C++. The `if` statement allows for conditional execution of code blocks based on a boolean expression.
+
+```cprime
+if (condition) {
+    // Code block executed if condition is true
+else if (another_condition) {
+    // Code block executed if another_condition is true
+} else {
+    // Code block executed if condition is false
+}
+```
+
+### Switch Statements
+
+&emsp;Switch statements are declared with the `switch` reserved word, followed by a value to be evaluated. The `case` reserved word is used to define different cases for the value, and the `default` reserved word is used to define a default case if none of the specified cases match.
+
+```cprime
+switch (value) {
+    case 1:
+        // Code block executed if value is 1
+    case 2:
+        // Code block executed if value is 2
+    case 3:
+        // Code block executed if value is 3
+    default:
+        // Code block executed if value does not match any case
+}
+```
+
+### Loops
+
+&emsp;Loops in C-Prime can be broken down into main "categories": a `for` loop, a `foreach` loop, a `while` loop, and a `do while` loop, and an endless `loop`. The `for` loop is used for iterating over a range of values, the `foreach` loop is used for iterating over elements in a collection, the `while` loop is used for executing a block of code while a condition is true, and the `do while` loop is similar to the `while` loop but guarantees that the block of code will be executed at least once.
+
+#### Loop Limit
+
+&emsp;One unique feature of C-Prime loops is that every loop has a hard coded `limit` that can be defined by the user. This limit is a compile-time constant that is used to prevent infinite loops and ensure that loops terminate after a certain number of iterations. If a loop exceeds its limit, the loop will terminate.
+
+&emsp;The `limit` statement is declared with the `limit` reserved word, followed by a compile-time constant value. The `limit` statement is an optional, but highly recommended, feature of C-Prime loops. If no `limit` statement is provided, the loop will use a default limit `uint32_max` for the loop limit.
+
+&emsp;The `limit` statement is declared as `limit (compile_time_constant)`, where `compile_time_constant` is a compile-time constant value that is used to limit the number of iterations of the loop. The parentheses surrounding the `compile_time_constant` are not required, but are recommended for clarity, especially when the `compile_time_constant` is an expression.
+
+&emsp;The `limit` statement is created to easily address [The Power of 10 : Rule 2](https://en.wikipedia.org/wiki/The_Power_of_10:_Rules_for_Developing_Safety-Critical_Code#:~:text=Give%20all%20loops%20a%20fixed%20upper%20bound.%20It%20must%20be%20trivially%20possible%20for%20a%20checking%20tool%20to%20prove%20statically%20that%20the%20loop%20cannot%20exceed%20a%20preset%20upper%20bound%20on%20the%20number%20of%20iterations.%20If%20a%20tool%20cannot%20prove%20the%20loop%20bound%20statically%2C%20the%20rule%20is%20considered%20violated.)
+
+```cprime
+<loop syntax> limit (compile_time_constant) {
+    // Code block executed for each iteration of the loop
+}
+```
+
+#### For Loops
+
+```cprime
+for (initialization; condition; update) limit (compile_time_constant) {
+    // Code block executed for each iteration of the loop
+}
+```
+
+```cprime
+for (primitive uint32 i = 0; i < 10; i++) {
+    println(i); // Prints numbers 0 to 9
+}
+
+for (primitive uint32 i = 0; i < 10; i++) limit (10) {
+    println(i); // Prints numbers 0 to 9, but guarantees that the loop will not exceed 10 iterations
+}
+```
+
+#### Foreach Loops
+
+```cprime
+foreach (DataType element in collection) {
+    // Code block executed for each element in the collection
+}
+```
+
+```cprime
+foreach (DataType element in collection) limit (compile_time_constant) {
+    // Code block executed for each element in the collection
+}
+```
+
+#### While Loops
+
+```cprime
+while (condition) {
+    // Code block executed while the condition is true
+}
+```
+
+```cprime
+while (condition) limit (compile_time_constant) {
+    // Code block executed while the condition is true
+}
+```
+
+#### Do-While Loops
+
+```cprime
+do {
+    // Code block executed at least once and then while the condition is true
+} while (condition);
+```
+
+```cprime
+do {
+    // Code block executed at least once and then while the condition is true
+} while (condition) limit (compile_time_constant);
+```
+
+#### Endless Loops
+
+&emsp;Most other languages provide endless loops using constructs like `while (true)` or `for (;;)` which run indefinitely until explicitly broken out of. C-Prime provides the explicit `loop` construct for endless loops.
+
+&emsp;A `loop` can only be terminated using `break` or by reaching a `limit` if specified.
+
+&emsp;They are also useful when wanting to create a loop that runs for a specific number of iterations where you do not need to access the `i` variable, by specifying a `limit` on the `loop` construct.
+
+```cprime
+loop {
+    // Code block executed indefinitely until broken out of
+}
+```
+
+```cprime
+loop limit (compile_time_constant) {
+    // Code block executed indefinitely until broken out of or the limit is reached
+}
+```
+
+```cprime
+loop limit (10) {
+    // Code block executed 10 times (equivalent to `for (primitive uint32 i = 0; i < 10; i++)`)
+}
+```
+
+#### Break and Continue
+
+&emsp;C-Prime provides the `break` and `continue` statements to control the flow of loops.
+
+&emsp;- `break` immediately terminates the innermost loop. \
+&emsp;- `continue` skips the remaining code in the current iteration and proceeds to the next iteration of the loop.
