@@ -13,9 +13,9 @@ array
 list
 
 // Functions / Contracts
+main
 function
 return
-
 requires
 ensures
 result

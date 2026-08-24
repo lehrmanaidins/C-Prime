@@ -1,0 +1,23 @@
+// Unsigned Integer Types
+uint8
+uint16
+uint32
+uint64
+
+// Signed Integer Types
+int8
+int16
+int32
+int64
+
+// Floating-point types
+float32
+float64
+
+// Character types
+char8
+char16
+char32
+
+// Boolean type
+bool

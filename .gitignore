@@ -1,0 +1,44 @@
+# Build artifacts
+/bin/
+/build/
+/obj/
+/out/
+/target/
+
+# Executables
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Debug files
+*.pdb
+*.ilk
+*.obj
+*.o
+*.a
+*.lib
+
+# Visual Studio / IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln.docstates
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake-build-*/
+Makefile
+
+# Dependency folders
+packages/
+node_modules/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
