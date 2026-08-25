@@ -116,27 +116,36 @@
 &emsp;It is recommended to use snake_case for variable names in C-Prime. This means using lowercase letters and underscores to separate words in a variable name.
 
 ```cprime
-variable_name // Recommended naming convention
+variable_name // Recommended naming convention for run-time initialized variables
 ```
 
 &emsp;For constants that are used as compile-time constants, it is recommended to use UPPER_CASE with underscores to separate words.
 
 ```cprime
-VARIABLE_NAME // Recommended naming convention for constants
+VARIABLE_NAME // Recommended naming convention for compile-time constants
 ```
 
 ### Declaration and Initialization
 
-&emsp;Variables in C-Prime must be declared with a type before they can be used. The declaration specifies the variable's name and type.
+&emsp;Variables in C-Prime must be declared and initialized with a type and value before they can be used. The declaration and initialization specifies the variable's type, name, and initial value.
 
 ```cprime
-TypeName variable_name = initial_value;
+ExampleType variable_name = initial_value;
 ```
 
 &emsp;Variables in C-Prime cannot be declared without an initial value.
 
 ```cprime
-primitive uint32 x; // ERROR (Cannot declare variables without an initial value)
+ExampleType x; // ERROR (Cannot declare variables without an initial value)
+```
+
+### Assignment
+
+&emsp;Variables in C-Prime can be assigned values using the assignment operator (`=`). The value assigned must be of the same type as the variable or a type that can be implicitly converted to the variable's type.
+
+```cprime
+mutable ExampleType y = initial_value; // y is assigned the value initial_value
+y = new_value; // y is now assigned the value new_value
 ```
 
 ### Constants and Mutability
@@ -146,22 +155,12 @@ primitive uint32 x; // ERROR (Cannot declare variables without an initial value)
 &emsp;Constant variables can optionally be declared using the `const` keyword, but this is not required as all variables are immutable by default.
 
 ```cprime
-type ExampleType : primitive uint32;
-ExampleType x = 0; // Immutable variable
-// const ExampleType x = 0; // Same as above, but explicitly declared as constant
-x = 1; // ERROR (Cannot modify immutable variable)
+ExampleType x = initial_value; // Immutable variable
+// const ExampleType x = initial_value; // Same as above, but explicitly declared as constant
+x = new_value; // ERROR (Cannot modify immutable variable)
 
-mutable ExampleType y = 0; // Mutable variable
-y = 1; // OK (Can modify mutable variable)
-```
-
-### Assignment
-
-&emsp;Variables in C-Prime can be assigned values using the assignment operator (`=`). The value assigned must be of the same type as the variable or a type that can be implicitly converted to the variable's type.
-
-```cprime
-mutable ExampleType y = 0; // y is assigned the value 0
-y = 1; // y is now assigned the value 1
+mutable ExampleType y = initial_value; // Mutable variable
+y = new_value; // OK (Can modify mutable variable)
 ```
 
 ## Types
