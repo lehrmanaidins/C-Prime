@@ -52,18 +52,34 @@
 <<= // Left shift assignment
 >>= // Right shift assignment
 
-// Separators
+// Member Access
 . // Member Access Operator
+-> // 
+
+// Inheritance
 : // Inheritance Operator
+:: // 
 
-// Grouping, Scope, and Indexing symbols
-( // Left parenthesis
-) // Right parenthesis
-{ // Left brace
-} // Right brace
-[ // Left bracket
-] // Right bracket
+// Grouping
+( // Left Grouping Operator
+) // Right Grouping Operator
 
-// Comment Markers
-// // Single-line comment
-/* */ // Multi-line comment
+// Scope
+{ // Left Scope Operator
+} // Right Scope Operator
+
+// Collections
+[ // Left Index Access Operator
+] // Right Index Access Operator
+{ // Left Array Literal Operator
+} // Right Array Literal Operator
+( // Left Tuple Literal Operator
+) // Right Tuple Literal Operator
+
+// Templates
+< // Left Template Operator
+> // Right Template Operator
+
+// Metaprogramming
+@ // Attribute Operator
+# // Preprocessor Operator

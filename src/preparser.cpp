@@ -8,4 +8,6 @@
 
 #include "token.cpp"
 
-
+struct Phrase {
+    const std::vector<std::shared_ptr<Token>> tokens;
+};

@@ -13,13 +13,10 @@ array
 list
 
 // Functions / Contracts
-main
 function
 return
 requires
 ensures
-result
-old
 
 // Control Flow
 if
@@ -46,7 +43,7 @@ null
 void
 
 // Function Attributes
-@pure
-@entry
-@critical
-@interrupt
+pure
+entry
+critical
+interrupt

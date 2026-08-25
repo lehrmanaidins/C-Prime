@@ -4,7 +4,7 @@
 #include <fstream>
 #include <print>
 
-#include "lexer.cpp"
+#include "lexer/lexer.cpp"
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -27,8 +27,8 @@ int main(int argc, char* argv[]) {
 
     std::println("Found {} tokens:", tokens.size());
 
-    for (const Token& token : tokens) {
-        std::println("\ttoken type: {}\ttoken:\t\"{}\"", token.type, token.value);
+    for (const auto& token : tokens) {
+        std::println("\ttoken type: {}\ttoken:\t{}", token->type, token->value);
     }
 
     return 0;
