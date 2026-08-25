@@ -23,15 +23,28 @@ Token getToken(std::ifstream& file) {
     }
 
     if (file.peek() == '/') {
-        file.get();
-        const bool isComment = !file.eof() && file.peek() == '/';
-        file.unget();
-
-        if (isComment) {
+        const char slash = file.get();
+        if (!file.eof() && file.peek() == '/') {
+            file.get();
             std::string ignoredLine;
             std::getline(file, ignoredLine);
             return getToken(file);
         }
+
+        if (!file.eof() && file.peek() == '*') {
+            file.get();
+            while (!file.eof()) {
+                const char ch = file.get();
+                if (ch == '*' && !file.eof() && file.peek() == '/') {
+                    file.get();
+                    return getToken(file);
+                }
+            }
+            return Token(token);
+        }
+
+        file.unget();
+        token += slash;
     }
 
     const char c = file.peek();

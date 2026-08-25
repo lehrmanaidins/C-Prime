@@ -4,7 +4,7 @@ function main() {
 	// Single Line Commnt Example
 	
 	/*
-	 * Multiline Comment Example
+	    Multiline Comment Example
 	 */
 	
 	// Immutable Unsignd Integer Variables
