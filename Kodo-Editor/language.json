@@ -31,10 +31,10 @@
     "unsafe",
     "null",
     "void",
-    "@pure",
-    "@entry",
-    "@critical",
-    "@interrupt"
+    "pure",
+    "entry",
+    "critical",
+    "interrupt"
   ],
   "types": [
     "uint8",

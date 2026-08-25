@@ -4,7 +4,7 @@
   "name": "C-Prime Language Support",
   "type": "language",
   "author": "Hydranet",
-  "description": "Syntax highlighting for C-Prime files.",
+  "description": "Syntax highlighting for C-Prime files.\nhttps://github.com/lehrmanaidins/C-Prime",
   "extensions": [
     ".cprime",
     ".hprime"
