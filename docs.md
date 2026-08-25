@@ -136,7 +136,7 @@ TypeName variable_name = initial_value;
 &emsp;Variables in C-Prime cannot be declared without an initial value.
 
 ```cprime
-uint32 x; // ERROR (Cannot declare variables without an initial value)
+primitive uint32 x; // ERROR (Cannot declare variables without an initial value)
 ```
 
 ### Constants and Mutability
@@ -146,7 +146,7 @@ uint32 x; // ERROR (Cannot declare variables without an initial value)
 &emsp;Constant variables can optionally be declared using the `const` keyword, but this is not required as all variables are immutable by default.
 
 ```cprime
-type ExampleType : uint32;
+type ExampleType : primitive uint32;
 ExampleType x = 0; // Immutable variable
 // const ExampleType x = 0; // Same as above, but explicitly declared as constant
 x = 1; // ERROR (Cannot modify immutable variable)
@@ -210,8 +210,8 @@ primitive uint32 x = 0; // OK (Declares a variable of primitive type uint32)
 &emsp;The only implicit conversion allowed to a domain type is during initialization, where a literal value (not a variable) that is compatible with the underlying primitive type can be used to initialize a domain type variable.
 
 ```cprime
-type Altitude : uint32;
-type Distance : uint32;
+type Altitude : primitive uint32;
+type Distance : primitive uint32;
 
 Altitude altitude = 0; // OK (0 is a literal value compatible with the underlying primitive type uint32)
 
@@ -221,7 +221,7 @@ Altitude altitude = Altitude(x); // OK (Explicitly constructs a domain type Alti
 
 Distance distance = altitude; // ERROR (Cannot implicitly convert between domain types)
 Distance distance = Distance(altitude); // ERROR (No valid constructor for Distance that can accept a value of type Altitude)
-Distance distance = Distance(underlying_cast<uint32>(altitude)); // OK (Explicitly constructs a domain type Distance from the underlying primitive type of Altitude)
+Distance distance = Distance(underlying_cast<primitive uint32>(altitude)); // OK (Explicitly constructs a domain type Distance from the underlying primitive type of Altitude)
 ```
 
 ### Type Conversion
@@ -238,18 +238,18 @@ reinterpret_cast<T>(value) // Reinterpretation conversion; bit-level reinterpret
 
 ```cprime
 primitive uint16 x = 1000;
-primitive uint32 y = widen_cast<uint32>(x); // OK (Widening conversion)
-primitive uint16 z = narrow_cast<uint16>(y); // ERROR (Narrowing conversion, unsafe)
-unsafe primitive uint16 z = narrow_cast<uint16>(y); // OK (Narrowing conversion, but potentially lossy)
+primitive uint32 y = widen_cast<primitive uint32>(x); // OK (Widening conversion)
+primitive uint16 z = narrow_cast<primitive uint16>(y); // ERROR (Narrowing conversion, unsafe)
+unsafe primitive uint16 z = narrow_cast<primitive uint16>(y); // OK (Narrowing conversion, but potentially lossy)
 
-type Altitude : uint32;
+type Altitude : primitive uint32;
 Altitude altitude = 1000;
-primitive uint32 n = underlying_cast<uint32>(altitude); // OK (Converts Altitude to its underlying primitive type)
-primitive uint16 m = underlying_cast<uint16>(altitude); // ERROR (Cannot convert Altitude to uint16, as it is not the underlying type of Altitude)
+primitive uint32 n = underlying_cast<primitive uint32>(altitude); // OK (Converts Altitude to its underlying primitive type)
+primitive uint16 m = underlying_cast<primitive uint16>(altitude); // ERROR (Cannot convert Altitude to uint16, as it is not the underlying type of Altitude)
 
 primitive uint32 a = 1065353216;
-primitive float32 b = reinterpret_cast<float32>(a); // ERROR (Unsafe reinterpretation conversion, must be marked as unsafe)
-unsafe primitive float32 b = reinterpret_cast<float32>(a); // OK (Unsafe reinterpretation conversion)
+primitive float32 b = reinterpret_cast<primitive float32>(a); // ERROR (Unsafe reinterpretation conversion, must be marked as unsafe)
+unsafe primitive float32 b = reinterpret_cast<primitive float32>(a); // OK (Unsafe reinterpretation conversion)
 ```
 
 ### Composite Types
@@ -259,7 +259,7 @@ unsafe primitive float32 b = reinterpret_cast<float32>(a); // OK (Unsafe reinter
 &emsp;C-Prime tuples are a fixed-size collection of elements of potentially different types. Tuples are defined with parentheses containing the types of the elements.
 
 ```cprime
-type Point : (uint32, float32); // Defines a tuple with a uint32 and a float32 element
+type Point : (primitive uint32, primitive float32); // Defines a tuple with a uint32 and a float32 element
 ```
 
 &emsp;Tuple literals are defined with parentheses containing comma-separated values of the corresponding types.
@@ -297,13 +297,13 @@ primitive uint32 z = x; // Unpacked variables can now be used independently
 ```cprime
 primitive uint32[5] numbers; // ERROR (Cannot declare an array without initializing all elements)
 primitive uint32[5] numbers = {0, 0, 0, 0, 0}; // Declares and initializes an array of 5 uint32 elements with the value 0
-primitive uint32[5] numbers = array_fill<uint32>(5, 0); // Declares and initializes an array of 5 uint32 elements with the value 0
+primitive uint32[5] numbers = array_fill<primitive uint32>(5, 0); // Declares and initializes an array of 5 uint32 elements with the value 0
 ```
 
 ```cprime
 primitive uint32[2][2] matrix = {{1, 2}, {3, 4}}; // Declares and initializes a 2D array of 2x2 uint32 elements
-primitive uint32[2][2] matrix = array_fill<uint32>(2, array_fill<uint32>(2, 0)); // Declares and initializes a 2D array of 2x2 uint32 elements with the value 0
-primitive uint32[2][2] matrix = array_fill<uint32>((2, 2), 0); // Declares and initializes a 2D array of 2x2 uint32 elements with the value 0
+primitive uint32[2][2] matrix = array_fill<primitive uint32>(2, array_fill<primitive uint32>(2, 0)); // Declares and initializes a 2D array of 2x2 uint32 elements with the value 0
+primitive uint32[2][2] matrix = array_fill<primitive uint32>((2, 2), 0); // Declares and initializes a 2D array of 2x2 uint32 elements with the value 0
 ```
 
 ```cprime
@@ -348,7 +348,7 @@ enum Status {
 &emsp;The C-Prime compiler will auto define the underlying type of `enum` values unless explicitly defined by the user.
 
 ```cprime
-enum Status : uint8 {
+enum Status : primitive uint8 {
     OK,
     WARNING,
     ERROR
@@ -358,7 +358,7 @@ enum Status : uint8 {
 &emsp;The underlying values of `enum`'s are undefined unless defined by the user.
 
 ```cprime
-enum Status : uint8 {
+enum Status : primitive uint8 {
     OK = 0,
     WARNING = 1,
     ERROR = 2
@@ -554,14 +554,14 @@ primitive bool is_equal = (x == y); // is_equal is false because x is still 42 a
 &emsp;To pass an argument by reference, the `reference` keyword must be used in the function parameter declaration. This allows the function to modify the original argument.
 
 ```cprime
-function increment(primitive mutable reference uint32 a) -> primitive uint32 {
+function increment(reference<mutable primitive uint32> a) -> primitive uint32 {
     a += 1; // Increments the value of a
     return a; // Returns the incremented value
 }
 ```
 
 ```cprime
-primitive mutable uint32 x = 42;
+mutable primitive uint32 x = 42;
 primitive uint32 y = increment(x); // OK (Calls the function increment with a value of type primitive uint32)
 
 primitive bool is_equal = (x == 43); // is_equal is true because x has been modified to 43 by the increment function
@@ -590,7 +590,7 @@ primitive bool is_equal = (x == 42); // is_equal is true because x has not been 
 &emsp;A function can be passed a reference to a variable, but return a copy of the referenced value.
 
 ```cprime
-function get_value_from_reference(primitive reference uint32 a) -> primitive uint32 {
+function get_value_from_reference(reference<primitive uint32> a) -> primitive uint32 {
     return a; // Returns a copy of the referenced value
 }
 ```
@@ -608,14 +608,14 @@ primitive bool is_equal = (x == 42); // is_equal is true because x has not been 
 &emsp;To return a value by reference, the `reference` keyword must be used in the return type declaration.
 
 ```cprime
-function get_reference(primitive reference uint32 a) -> primitive reference uint32 {
+function get_reference(reference<primitive uint32> a) -> reference<primitive uint32> {
     return a; // Returns a reference to the argument
 }
 ```
 
 ```cprime
 primitive uint32 x = 42;
-primitive reference uint32 y = get_reference(x); // OK (Returns a reference to x)
+reference<primitive uint32> y = get_reference(x); // OK (Returns a reference to x)
 
 y += 1; // Modifies x through the reference y
 primitive bool is_equal = (x == 43); // is_equal is true because x has been modified through y
@@ -624,7 +624,7 @@ primitive bool is_equal = (x == 43); // is_equal is true because x has been modi
 &emsp;Only a function's arguments that are passed by reference can be returned by reference. Returning a reference to a local variable is not allowed, as it would result in a dangling reference.
 
 ```cprime
-function get_local_reference() -> primitive reference uint32 {
+function get_local_reference() -> reference<primitive uint32> {
     primitive uint32 local = 42;
     return local; // Error: Returning a reference to a local variable is not allowed
 }
@@ -646,7 +646,7 @@ function add(primitive uint16 a, primitive uint16 b) -> primitive uint16 {
 
 ### Function Templates
 
-&emsp;C-Prime supports function templates, which allow the creation of generic functions that can operate on different types. Templates are defined using the `template` keyword followed by type parameters in angle brackets (`<>`).
+&emsp;C-Prime supports function templates, which allow the creation of generic functions that can operate on different types. Templates are defined using the `template` keyword followed by type parameters in angle brackets (`< >`).
 
 ```cprime
 template <type T>
