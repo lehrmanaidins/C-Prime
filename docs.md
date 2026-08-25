@@ -319,7 +319,7 @@ struct State {
     Position position;
     Velocity velocity;
     Acceleration acceleration;
-}
+};
 ```
 
 &emsp;Struct members can be accessed using the struct variable, the `.` operator, and the name of the underlying variable.
@@ -342,7 +342,7 @@ enum Status {
     OK,
     WARNING,
     ERROR
-}
+};
 ```
 
 &emsp;The C-Prime compiler will auto define the underlying type of `enum` values unless explicitly defined by the user.
@@ -352,7 +352,7 @@ enum Status : uint8 {
     OK,
     WARNING,
     ERROR
-}
+};
 ```
 
 &emsp;The underlying values of `enum`'s are undefined unless defined by the user.
@@ -362,7 +362,7 @@ enum Status : uint8 {
     OK = 0,
     WARNING = 1,
     ERROR = 2
-}
+};
 ```
 
 ### Memory

@@ -6,8 +6,6 @@
 
 #include "token.cpp"
 
-namespace lexer {
-
 Token getToken(std::ifstream& file) {
     std::string token = "";
 
@@ -15,18 +13,30 @@ Token getToken(std::ifstream& file) {
     while (!file.eof()) {
         char c = file.peek();
         // std::println("Skipping delimiter: {{}}", c);
-        if (!isDelimiter(c)) {
+        if (!Token::isDelimiter(c)) {
             break;
         }
         file.get();
     }
 
+    if (!file.eof() && file.peek() == '/') {
+        file.get();
+        const bool isComment = !file.eof() && file.peek() == '/';
+        file.unget();
+
+        if (isComment) {
+            std::string ignoredLine;
+            std::getline(file, ignoredLine);
+            return getToken(file);
+        }
+    }
+
     // Check if the next character is a separator and return it as a token if it is
     if (!file.eof()) {
         char c = file.peek();
-        if (isSeparator(c)) {
+        if (Token::isSeparator(c)) {
             token += file.get();
-            return token;
+            return Token(token);
         }
     }
 
@@ -47,7 +57,7 @@ Token getToken(std::ifstream& file) {
             }
         }
 
-        return token;
+        return Token(token);
     }
 
     // Read token until delimiter or separator
@@ -55,11 +65,11 @@ Token getToken(std::ifstream& file) {
         char c = file.peek();
         // std::println("Reading character: {{}}", c);
 
-        if (isDelimiter(c)) {
+        if (Token::isDelimiter(c)) {
             break;
         }
 
-        if (isSeparator(c)) {
+        if (Token::isSeparator(c)) {
             break;
         }
 
@@ -69,50 +79,20 @@ Token getToken(std::ifstream& file) {
     return Token(token);
 }
 
-Tokens lexFile(const std::string& filename) {
-    std::ifstream file(filename);
-
+Tokens getTokens(const std::string& filename) {
     Tokens tokens{};
     std::string token = "";
-
+    
+    std::ifstream file(filename);
     while (!(token = getToken(file)).empty()) {
-        // std::println("token: {}", token);
         tokens.push_back(token);
     }
 
     return tokens;
 }
 
-}
+Tokens lexFile(const std::string& filename) {
+    Tokens tokens = getTokens(filename);
 
-/*
- * Lexer for C-Prime source files.
- * @param filename The name of the C-Prime source file to lex.
- */
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::println("Usage: {} <filename>", argv[0]);
-        return 1;
-    }
-
-    const std::string filename = argv[1];
-
-    std::println("Lexing file: {}", filename);
-    // Check if the file exists and can be opened
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        std::println("Error: Could not open file {}", filename);
-        return 1;
-    }
-    file.close();
-
-    lexer::Tokens tokens = lexer::lexFile(filename);
-
-    std::println("Found {} tokens:", tokens.size());
-
-    for (const lexer::Token& token : tokens) {
-        std::println("\ttoken type: {}\ttoken:\t\"{}\"", token.type, token.value);
-    }
-
-    return 0;
+    return tokens;
 }

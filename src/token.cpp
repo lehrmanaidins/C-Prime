@@ -4,19 +4,19 @@
 #include <fstream>
 #include <algorithm>
 #include <cctype>
+#if __has_include(<format>)
 #include <format>
-#include <print>
+#endif
 
-namespace lexer {
 
 using Terms = std::vector<std::string>;
 
 enum class TokenType {
     Default,
     Separator,
-    Delimiter,
     Keyword,
     Primitive,
+    Type,
     Identifier,
     Literal,
     Operator,
@@ -24,33 +24,31 @@ enum class TokenType {
     Unknown
 };
 
-} // namespace lexer
-
+#if defined(__cpp_lib_format) && __cpp_lib_format >= 201907L
 template <>
-struct std::formatter<lexer::TokenType> {
+struct std::formatter<TokenType> {
     constexpr auto parse(std::format_parse_context& ctx) {
         return ctx.begin();
     }
 
-    auto format(const lexer::TokenType& type, std::format_context& ctx) const {
+    auto format(const TokenType& type, std::format_context& ctx) const {
         std::string_view name;
         switch (type) {
-            case lexer::TokenType::Default: name = "Default"; break;
-            case lexer::TokenType::Separator: name = "Separator"; break;
-            case lexer::TokenType::Delimiter: name = "Delimiter"; break;
-            case lexer::TokenType::Keyword: name = "Keyword"; break;
-            case lexer::TokenType::Primitive: name = "Primitive"; break;
-            case lexer::TokenType::Identifier: name = "Identifier"; break;
-            case lexer::TokenType::Literal: name = "Literal"; break;
-            case lexer::TokenType::Empty: name = "Empty"; break;
-            case lexer::TokenType::Operator: name = "Operator"; break;
-            case lexer::TokenType::Unknown: name = "Unknown"; break;
+            case TokenType::Default: name = "Default"; break;
+            case TokenType::Separator: name = "Separator"; break;
+            case TokenType::Keyword: name = "Keyword"; break;
+            case TokenType::Primitive: name = "Primitive"; break;
+            case TokenType::Type: name = "Type"; break;
+            case TokenType::Identifier: name = "Identifier"; break;
+            case TokenType::Literal: name = "Literal"; break;
+            case TokenType::Empty: name = "Empty"; break;
+            case TokenType::Operator: name = "Operator"; break;
+            case TokenType::Unknown: name = "Unknown"; break;
         }
         return std::format_to(ctx.out(), "{}", name);
     }
 };
-
-namespace lexer {
+#endif
 
 Terms loadTerms(const std::string& filename) {
     std::ifstream termsFile(filename);
@@ -91,57 +89,6 @@ Terms loadTerms(const std::string& filename) {
     return terms;
 }
 
-bool isSeparator(char c) {
-    static const std::string separators = ",;(){}[]<>"; 
-    return separators.find(c) != std::string::npos;
-}
-
-bool isDelimiter(char c) {
-    static const std::string delimiters = " \n\t";
-    return delimiters.find(c) != std::string::npos;
-}
-
-bool isKeyword(const std::string& str) {
-    static const Terms keywords = loadTerms("src/keywords.txt");
-    return std::find(keywords.begin(), keywords.end(), str) != keywords.end();
-}
-
-bool isPrimitive(const std::string& str) {
-    static const Terms primitives = loadTerms("src/primitives.txt");
-    return std::find(primitives.begin(), primitives.end(), str) != primitives.end();
-}
-
-bool isLiteral(const std::string& str) {
-    if (str.size() >= 2 &&
-        ((str.front() == '"' && str.back() == '"') ||
-         (str.front() == '\'' && str.back() == '\''))) {
-        return true;
-    }
-
-    bool hasDecimalPoint = false;
-    if (str.empty()) {
-        return false;
-    }
-
-    for (char c : str) {
-        if (std::isdigit(static_cast<unsigned char>(c))) {
-            continue;
-        }
-        if (c == '.' && !hasDecimalPoint) {
-            hasDecimalPoint = true;
-            continue;
-        }
-        return false;
-    }
-
-    return true;
-}
-
-bool isOperator(const std::string& str) {
-    static const Terms operators = loadTerms("src/operators.txt");
-    return std::find(operators.begin(), operators.end(), str) != operators.end();
-}
-
 struct Token {
     const std::string value;
     TokenType type;
@@ -151,6 +98,71 @@ struct Token {
     }
 
     operator std::string() const { return value; }
+
+    static bool isSeparator(char c) {
+        static const std::string separators = ",;(){}[]<>"; 
+        return separators.find(c) != std::string::npos;
+    }
+
+    static bool isDelimiter(char c) {
+        static const std::string delimiters = " \n\t";
+        return delimiters.find(c) != std::string::npos;
+    }
+
+    static bool isKeyword(const std::string& str) {
+        static const Terms keywords = loadTerms("src/keywords.txt");
+        return std::find(keywords.begin(), keywords.end(), str) != keywords.end();
+    }
+
+    static bool isPrimitive(const std::string& str) {
+        static const Terms primitives = loadTerms("src/primitives.txt");
+        return std::find(primitives.begin(), primitives.end(), str) != primitives.end();
+    }
+
+    static bool isLiteral(const std::string& str) {
+        if (str.size() >= 2 &&
+            ((str.front() == '"' && str.back() == '"') ||
+            (str.front() == '\'' && str.back() == '\''))) {
+            return true;
+        }
+
+        bool hasDecimalPoint = false;
+        if (str.empty()) {
+            return false;
+        }
+
+        for (char c : str) {
+            if (std::isdigit(static_cast<unsigned char>(c))) {
+                continue;
+            }
+            if (c == '.' && !hasDecimalPoint) {
+                hasDecimalPoint = true;
+                continue;
+            }
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool isOperator(const std::string& str) {
+        static const Terms operators = loadTerms("src/operators.txt");
+        return std::find(operators.begin(), operators.end(), str) != operators.end();
+    }
+
+    static bool isIdentifier(const std::string& str) {
+        if (str.empty()) {
+            return false;
+        }
+
+        for (const char& c : str) {
+            if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_') {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private:
 
@@ -162,11 +174,6 @@ struct Token {
        
         if (isSeparator(value[0])) {
             type = TokenType::Separator;
-            return;
-        }
-        
-        if (isDelimiter(value[0])) {
-            type = TokenType::Delimiter;
             return;
         }
 
@@ -190,10 +197,13 @@ struct Token {
             return;
         }
 
+        if (isIdentifier(value)) {
+            type = TokenType::Identifier;
+            return;
+        }
+
         type = TokenType::Unknown;
     }
 };
 
 using Tokens = std::vector<Token>;
-
-}

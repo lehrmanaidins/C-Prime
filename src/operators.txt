@@ -53,9 +53,8 @@
 >>= // Right shift assignment
 
 // Separators
-, // Comma
-. // Dot
-; // Semicolon
+. // Member Access Operator
+: // Inheritance Operator
 
 // Grouping, Scope, and Indexing symbols
 ( // Left parenthesis

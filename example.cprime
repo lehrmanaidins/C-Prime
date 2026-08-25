@@ -18,4 +18,34 @@ function main() {
     mutable primitive char8 l = 'a';
     mutable primitive char16 m = 'b';
     mutable primitive char32 n = 'c';
+
+    // primitive bool o = false;
+    // mutable primitive bool p = true;
+
+    primitive uint8[3] q = {1, 2, 3};
+    (primitive uint8, primitive float32) r = (1, 2.0);
+
+    type ExampleType : uint8;
+    type ExampleTuple : (ExampleType, ExampleType);
+    type ExampleArray : ExampleType[];
+
+    ExampleType s = 1.0;
+    ExampleTuple t = (1, 2);
+    ExampleArray[3] u = {1, 2, 3};
+
+    struct ExampleStruct {
+        ExampleType value1;
+        ExampleType value2;
+    };
+
+    ExampleStruct example_struct = {
+        value1 = 1,
+        value2 = 2
+    };
+
+    enum ExampleEnum {
+        EXAMPLE1,
+        EXAMPLE2,
+        EXAMPLE3
+    };
 }
