@@ -1,0 +1,12 @@
+{
+  "id": "c-prime-kodo-extension",
+  "version": "v1.3.5",
+  "name": "C-Prime Language Support",
+  "type": "language",
+  "author": "Hydranet",
+  "description": "Syntax highlighting for C-Prime files.",
+  "extensions": [
+    ".cprime",
+    ".hprime"
+  ]
+}
