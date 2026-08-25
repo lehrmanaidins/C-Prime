@@ -1,6 +1,12 @@
 
 function main() {
 	
+	// Single Line Commnt Example
+	
+	/*
+	 * Multiline Comment Example
+	 */
+	
 	// Immutable Unsignd Integer Variables
     primitive uint8 a = 1;
     primitive uint16 b = 2;
