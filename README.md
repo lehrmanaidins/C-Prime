@@ -9,6 +9,12 @@
 
 --- 
 
+### Work in Progress
+
+&emsp;This project is currently under active development. Features and functionality may change as the language evolves.
+
+&emsp;This repo was released very early in the dev cycle, so features may be incomplete or subject to change. Please provide feedback and report any issues you encounter.
+
 ### About
 
 &emsp;C-Prime is a programming language designed for critical systems, emphasizing safety and reliability.
@@ -24,5 +30,3 @@
 ### Transpiler
 
 &emsp;C-Prime includes a transpiler that converts C-Prime code into C++ code for execution on standard C++ compilers. This allows developers to leverage existing C++ toolchains while benefiting from the safety and reliability features of C-Prime.
-
-
