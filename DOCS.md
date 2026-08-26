@@ -831,3 +831,14 @@ loop limit (10) {
 
 &emsp;- `break` immediately terminates the innermost loop. \
 &emsp;- `continue` skips the remaining code in the current iteration and proceeds to the next iteration of the loop.
+
+## Built-in Functions
+
+### Print Functions
+
+&emsp;C-Prime provides built-in functions for printing output to the console. The functions are `print` and `println`. `print` outputs the text without a newline at the end, while `println` outputs the text followed by a newline.
+
+```cprime
+print("Hello, World!");   // Prints "Hello, World!" without a newline
+println("Hello, World!"); // Prints "Hello, World!" followed by a newline
+```

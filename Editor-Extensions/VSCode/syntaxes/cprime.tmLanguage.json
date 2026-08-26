@@ -1,0 +1,94 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "C-Prime",
+  "scopeName": "source.cprime",
+  "fileTypes": [
+    "cprime",
+    "hprime"
+  ],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#chars" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#types" },
+    { "include": "#functions" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cprime",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.cprime",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.cprime",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        { "name": "constant.character.escape.cprime", "match": "\\\\." }
+      ]
+    },
+    "chars": {
+      "name": "string.quoted.single.cprime",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        { "name": "constant.character.escape.cprime", "match": "\\\\." }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.integer.cprime",
+          "match": "\\b(?:0[xX][0-9A-Fa-f]+|\\d+)\\b"
+        },
+        {
+          "name": "constant.numeric.float.cprime",
+          "match": "\\b\\d+\\.\\d+(?:[eE][+-]?\\d+)?\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.cprime",
+          "match": "\\b(?:if|else|switch|case|default|for|foreach|while|do|loop|break|continue|limit|return|requires|ensures|release|debug|unsafe|const|mutable|type|struct|enum|function|void|true|false|null|import)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.cprime",
+          "match": "\\b(?:primitive|reference|uint8|uint16|uint32|uint64|int8|int16|int32|int64|float32|float64|char8|char16|char32|bool)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "entity.name.function.cprime",
+          "match": "\\b(?:print|println|array_fill|widen_cast|narrow_cast|underlying_cast|reinterpret_cast)\\s*(?=\\()"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.cprime",
+          "match": "[=+\\-*/%<>!&|^~:.,;\\[\\]{}()\\?]"
+        }
+      ]
+    }
+  }
+}

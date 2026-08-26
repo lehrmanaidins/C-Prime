@@ -1,148 +1,203 @@
-
 #pragma once
 
-#include <string>
-#include <vector>
+#include <cctype>
 #include <fstream>
 #include <memory>
-#include <print>
+#include <sstream>
+#include <string>
+#include <vector>
 
 #include "token.cpp"
 
-Token getToken(std::ifstream& file) {
-    std::string token = "";
+struct SourceCursor {
+    explicit SourceCursor(const std::string& source)
+        : source(source), index(0), line(1), column(1) {
+    }
 
-    while (!file.eof()) {
-        const char c = file.peek();
-        if (!Token::isDelimiter(c)) {
+    const std::string& source;
+    size_t index;
+    size_t line;
+    size_t column;
+
+    bool eof() const {
+        return index >= source.size();
+    }
+
+    char peek(size_t offset = 0) const {
+        if (index + offset >= source.size()) {
+            return '\0';
+        }
+
+        return source[index + offset];
+    }
+
+    char get() {
+        if (eof()) {
+            return '\0';
+        }
+
+        const char ch = source[index++];
+        if (ch == '\n') {
+            ++line;
+            column = 1;
+        } else {
+            ++column;
+        }
+
+        return ch;
+    }
+};
+
+static void skipDelimiters(SourceCursor& cursor) {
+    while (!cursor.eof() && Token::isDelimiter(cursor.peek())) {
+        cursor.get();
+    }
+}
+
+static void skipCommentIfPresent(SourceCursor& cursor, bool& skipped_comment) {
+    skipped_comment = false;
+
+    if (cursor.peek() != '/') {
+        return;
+    }
+
+    if (cursor.peek(1) == '/') {
+        cursor.get();
+        cursor.get();
+
+        while (!cursor.eof() && cursor.peek() != '\n') {
+            cursor.get();
+        }
+
+        skipped_comment = true;
+        return;
+    }
+
+    if (cursor.peek(1) == '*') {
+        cursor.get();
+        cursor.get();
+
+        while (!cursor.eof()) {
+            const char ch = cursor.get();
+            if (ch == '*' && cursor.peek() == '/') {
+                cursor.get();
+                break;
+            }
+        }
+
+        skipped_comment = true;
+    }
+}
+
+Token getToken(SourceCursor& cursor) {
+    std::string token;
+
+    while (true) {
+        skipDelimiters(cursor);
+
+        bool skipped_comment = false;
+        skipCommentIfPresent(cursor, skipped_comment);
+        if (!skipped_comment) {
             break;
         }
-        file.get();
     }
 
-    if (file.eof()) {
-        return Token(token);
+    if (cursor.eof()) {
+        return Token(token, cursor.line, cursor.column);
     }
 
-    if (file.peek() == '/') {
-        const char slash = file.get();
-        if (!file.eof() && file.peek() == '/') {
-            file.get();
-            std::string ignoredLine;
-            std::getline(file, ignoredLine);
-            return getToken(file);
-        }
+    const size_t token_line = cursor.line;
+    const size_t token_column = cursor.column;
 
-        if (!file.eof() && file.peek() == '*') {
-            file.get();
-            while (!file.eof()) {
-                const char ch = file.get();
-                if (ch == '*' && !file.eof() && file.peek() == '/') {
-                    file.get();
-                    return getToken(file);
-                }
-            }
-            return Token(token);
-        }
-
-        file.unget();
-        token += slash;
-    }
-
-    const char c = file.peek();
+    const char c = cursor.peek();
     if (Token::isSeparator(c)) {
-        token += file.get();
-        return Token(token);
+        token += cursor.get();
+        return Token(token, token_line, token_column);
     }
 
-    const bool isNumberStart = std::isdigit(static_cast<unsigned char>(c)) ||
-        (c == '.' && !file.eof() && [&file]() {
-            const std::streampos pos = file.tellg();
-            file.get();
-            const char next = file.peek();
-            file.seekg(pos);
-            return std::isdigit(static_cast<unsigned char>(next));
-        }());
+    const bool is_number_start = std::isdigit(static_cast<unsigned char>(c))
+        || (c == '.' && std::isdigit(static_cast<unsigned char>(cursor.peek(1))));
 
-    if (isNumberStart) {
-        while (!file.eof()) {
-            const char ch = file.peek();
+    if (is_number_start) {
+        while (!cursor.eof()) {
+            const char ch = cursor.peek();
             if (std::isdigit(static_cast<unsigned char>(ch))) {
-                token += file.get();
+                token += cursor.get();
                 continue;
             }
 
-            if (ch == '.') {
-                const std::streampos pos = file.tellg();
-                file.get();
-                const char next = file.peek();
-                file.seekg(pos);
-                if (std::isdigit(static_cast<unsigned char>(next))) {
-                    token += file.get();
-                    continue;
-                }
+            if (ch == '.' && std::isdigit(static_cast<unsigned char>(cursor.peek(1)))) {
+                token += cursor.get();
+                continue;
             }
 
             break;
         }
-        return Token(token);
+
+        return Token(token, token_line, token_column);
     }
 
     if (Token::isOperatorStart(c)) {
-        while (!file.eof()) {
-            const char ch = file.peek();
-            const std::string peeked = token + ch;
-
-            if (!Token::isOperator(peeked)) {
+        while (!cursor.eof()) {
+            const char ch = cursor.peek();
+            const std::string next_value = token + ch;
+            if (!Token::isOperator(next_value)) {
                 break;
             }
 
-            token += file.get();
+            token += cursor.get();
         }
-        return Token(token);
+
+        return Token(token, token_line, token_column);
     }
 
     if (c == '"' || c == '\'') {
-        const char quote = file.get();
+        const char quote = cursor.get();
         token += quote;
-        bool escaped = false;
 
-        while (!file.eof()) {
-            const char ch = file.get();
+        bool escaped = false;
+        while (!cursor.eof()) {
+            const char ch = cursor.get();
             token += ch;
+
             if (ch == quote && !escaped) {
                 break;
             }
-            escaped = ch == '\\' && !escaped;
-            if (ch != '\\') {
+
+            if (ch == '\\' && !escaped) {
+                escaped = true;
+            } else {
                 escaped = false;
             }
         }
 
-        return Token(token);
+        return Token(token, token_line, token_column);
     }
 
-    while (!file.eof()) {
-        const char ch = file.peek();
-
+    while (!cursor.eof()) {
+        const char ch = cursor.peek();
         if (Token::isDelimiter(ch) || Token::isSeparator(ch) || Token::isOperatorStart(ch)) {
             break;
         }
 
-        token += file.get();
+        token += cursor.get();
     }
 
-    return Token(token);
+    return Token(token, token_line, token_column);
 }
 
 Tokens getTokens(const std::string& filename) {
     Tokens tokens{};
-    
+
     std::ifstream file(filename);
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    const std::string source = buffer.str();
+
+    SourceCursor cursor(source);
 
     while (true) {
-        Token token = getToken(file);
-
+        Token token = getToken(cursor);
         if (!token) {
             break;
         }
@@ -152,9 +207,7 @@ Tokens getTokens(const std::string& filename) {
 
     return tokens;
 }
-    
-Tokens lexFile(const std::string& filename) {
-    Tokens tokens = getTokens(filename);
 
-    return tokens;
+Tokens lexFile(const std::string& filename) {
+    return getTokens(filename);
 }

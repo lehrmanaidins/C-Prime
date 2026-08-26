@@ -59,4 +59,7 @@ function main() {
         EXAMPLE2,
         EXAMPLE3
     };
+
+    print("Hello, World!");
+    println("Hello, World!");
 }

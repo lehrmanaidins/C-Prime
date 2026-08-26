@@ -1,0 +1,43 @@
+{
+  "name": "c-prime-syntax",
+  "displayName": "C-Prime Syntax Highlighting",
+  "description": "Syntax highlighting for C-Prime files (.cprime and .hprime)",
+  "publisher": "Hydranet",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lehrmanaidins/C-Prime"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "scripts": {
+    "package": "vsce package"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "cprime",
+        "aliases": [
+          "C-Prime",
+          "cprime"
+        ],
+        "extensions": [
+          ".cprime",
+          ".hprime"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cprime",
+        "scopeName": "source.cprime",
+        "path": "./syntaxes/cprime.tmLanguage.json"
+      }
+    ]
+  }
+}

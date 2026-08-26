@@ -130,8 +130,11 @@ Terms loadTerms(const std::string& filename, bool emptyLineAsSpace = false) {
 struct Token {
     const std::string value;
     TokenCatagory type;
+    size_t line;
+    size_t column;
 
-    Token(const std::string& val) : value(val), type(TokenCatagory::Default) {
+    Token(const std::string& val, size_t line = 0, size_t column = 0)
+        : value(val), type(TokenCatagory::Default), line(line), column(column) {
         findTokenType();
     }
 

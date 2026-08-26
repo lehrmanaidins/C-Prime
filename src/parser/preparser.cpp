@@ -11,10 +11,31 @@
 #include "../lexer/token.cpp"
 #include "phrase.cpp"
 
+static bool phraseIntroducesScope(const std::vector<std::shared_ptr<Token>>& tokens) {
+    if (tokens.empty()) {
+        return false;
+    }
+
+    if (tokens[0] && (
+        tokens[0]->value == "function"
+        || tokens[0]->value == "struct"
+        || tokens[0]->value == "enum"
+        || tokens[0]->value == "if"
+        || tokens[0]->value == "while"
+        || tokens[0]->value == "for"
+        || tokens[0]->value == "else"
+    )) {
+        return true;
+    }
+
+    return false;
+}
+
 Phrases preparseTokens(const Tokens& tokens) {
     Phrases phrases{};
     std::vector<std::shared_ptr<Phrase>> scope_stack{};
     std::vector<std::shared_ptr<Token>> current_tokens{};
+    int expression_brace_depth = 0;
 
     auto flushCurrent = [&]() {
         if (current_tokens.empty()) {
@@ -22,19 +43,6 @@ Phrases preparseTokens(const Tokens& tokens) {
         }
 
         std::shared_ptr<Phrase> parent = scope_stack.empty() ? nullptr : scope_stack.back();
-
-        if (parent != nullptr && parent->tokens.empty() && parent->nested_phrases.empty()) {
-            parent->tokens = current_tokens;
-            current_tokens.clear();
-
-            if (parent->hasParent()) {
-                parent->parent_phrase->addNested(parent);
-            } else {
-                phrases.push_back(parent);
-            }
-            return;
-        }
-
         auto phrase = std::make_shared<Phrase>(current_tokens, parent);
 
         if (parent != nullptr) {
@@ -46,15 +54,6 @@ Phrases preparseTokens(const Tokens& tokens) {
         current_tokens.clear();
     };
 
-    auto openScope = [&]() {
-        std::shared_ptr<Phrase> parent = scope_stack.empty()
-            ? (phrases.empty() ? nullptr : phrases.back())
-            : scope_stack.back();
-
-        auto scope_phrase = std::make_shared<Phrase>(std::vector<std::shared_ptr<Token>>{}, parent);
-        scope_stack.push_back(scope_phrase);
-    };
-
     for (const std::shared_ptr<Token>& token : tokens) {
         if (!token) {
             continue;
@@ -63,12 +62,32 @@ Phrases preparseTokens(const Tokens& tokens) {
         const std::string value = token->value;
 
         if (value == "{") {
-            flushCurrent();
-            openScope();
+            if (!current_tokens.empty() && phraseIntroducesScope(current_tokens)) {
+                flushCurrent();
+                if (!scope_stack.empty()) {
+                    scope_stack.push_back(scope_stack.back()->nested_phrases.back());
+                } else if (!phrases.empty()) {
+                    scope_stack.push_back(phrases.back());
+                }
+                continue;
+            }
+
+            if (!scope_stack.empty() || !current_tokens.empty()) {
+                current_tokens.push_back(token);
+                ++expression_brace_depth;
+                continue;
+            }
+
             continue;
         }
 
         if (value == "}") {
+            if (expression_brace_depth > 0) {
+                current_tokens.push_back(token);
+                --expression_brace_depth;
+                continue;
+            }
+
             flushCurrent();
             if (!scope_stack.empty()) {
                 scope_stack.pop_back();
@@ -77,6 +96,11 @@ Phrases preparseTokens(const Tokens& tokens) {
         }
 
         if (value == ";") {
+            if (expression_brace_depth > 0) {
+                current_tokens.push_back(token);
+                continue;
+            }
+
             flushCurrent();
             continue;
         }
