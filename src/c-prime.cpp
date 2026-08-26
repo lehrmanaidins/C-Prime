@@ -1,177 +1,153 @@
 
-#include <string>
-#include <vector>
-#include <fstream>
-#include <iostream>
 #include <exception>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #include "lexer/lexer.cpp"
 #include "parser/preparser.cpp"
 #include "parser/parser.cpp"
 #include "semantic/semantic.cpp"
 #include "transpiler/cpp_emitter.cpp"
+#include "cli/arguments.cpp"
+#include "debug/print.cpp"
+#include "io/file.cpp"
 
-std::string tokenCategoryName(TokenCatagory category) {
-    switch (category) {
-        case TokenCatagory::Default:
-            return "Default";
-        case TokenCatagory::Separator:
-            return "Separator";
-        case TokenCatagory::Keyword:
-            return "Keyword";
-        case TokenCatagory::Primitive:
-            return "Primitive";
-        case TokenCatagory::Type:
-            return "Type";
-        case TokenCatagory::Identifier:
-            return "Identifier";
-        case TokenCatagory::Literal:
-            return "Literal";
-        case TokenCatagory::Operator:
-            return "Operator";
-        case TokenCatagory::Unknown:
-        default:
-            return "Unknown";
+static std::string sourceBasename(const std::string& filename) {
+    const std::string extension = ".cprime";
+    if (filename.size() >= extension.size()
+        && filename.substr(filename.size() - extension.size()) == extension) {
+        return filename.substr(0, filename.size() - extension.size());
     }
+
+    return filename;
 }
 
-std::string joinPhraseText(const Tokens& tokens) {
-    std::string text;
-
-    for (const auto& token : tokens) {
-        if (!token) {
-            continue;
-        }
-
-        if (!text.empty()) {
-            text += " ";
-        }
-
-        text += token->value;
+static std::string defaultCppOutputFilename(const CliOptions& options) {
+    if (!options.output_filename.empty()) {
+        return options.output_filename;
     }
 
-    return text;
+    return sourceBasename(options.filename) + ".cpp";
 }
 
-void printPhraseTree(const std::shared_ptr<Phrase>& phrase, int depth = 0) {
-    std::cout << std::string(depth * 2, ' ') << "Phrase ["
-              << phrase->start_line << ":" << phrase->start_column
-              << "-" << phrase->end_line << ":" << phrase->end_column
-              << "]: " << joinPhraseText(phrase->tokens) << "\n";
-    for (const auto& token : phrase->tokens) {
-        std::cout << std::string(depth * 2 + 2, ' ') << "  "
-                  << tokenCategoryName(token->type) << " ["
-                  << token->line << ":" << token->column << "] : "
-                  << token->value << "\n";
+static std::string defaultBinaryFilename(const CliOptions& options) {
+    if (!options.binary_filename.empty()) {
+        return options.binary_filename;
     }
 
-    for (const auto& nested : phrase->nested_phrases) {
-        printPhraseTree(nested, depth + 1);
-    }
+    return sourceBasename(options.filename);
 }
 
-void printParsedPhraseTree(const std::shared_ptr<ParsedPhrase>& phrase, int depth = 0) {
-    if (!phrase) {
-        return;
-    }
-
-    const std::string phrase_text = phrase->source_phrase
-        ? joinPhraseText(phrase->source_phrase->tokens)
-        : "";
-    std::cout << std::string(depth * 2, ' ') << phrase->label() << ": " << phrase_text << "\n";
-    for (const auto& nested : phrase->nested_phrases) {
-        printParsedPhraseTree(nested, depth + 1);
-    }
+static bool shouldEmitCppFile(const CliOptions& options) {
+    return options.mode == CliMode::EmitCpp || options.mode == CliMode::EmitAndCompile;
 }
 
-bool fileExists(const std::string& filename) {
-    std::ifstream file(filename);
-    const bool exists = file.is_open();
-    file.close();
-    return exists;
+static bool shouldCompileBinary(const CliOptions& options) {
+    return options.mode == CliMode::CompileOnly || options.mode == CliMode::EmitAndCompile;
 }
 
-int main(int argc, char* argv[]) {
-    bool debug = false;
-    std::string filename;
-
-    for (int i = 1; i < argc; ++i) {
-        const std::string arg = argv[i];
-        if (arg == "--debug") {
-            debug = true;
-        } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: " << argv[0] << " [--debug] <filename>\n";
-            return 0;
-        } else if (filename.empty()) {
-            filename = arg;
+static std::string shellQuote(const std::string& value) {
+    std::string quoted = "'";
+    for (const char ch : value) {
+        if (ch == '\'') {
+            quoted += "'\\''";
         } else {
-            std::cout << "Usage: " << argv[0] << " [--debug] <filename>\n";
-            return 1;
+            quoted += ch;
         }
     }
+    quoted += "'";
+    return quoted;
+}
 
-    if (filename.empty()) {
-        std::cout << "Usage: " << argv[0] << " [--debug] <filename>\n";
-        return 1;
-    }
+static int compileCppFile(const std::string& cpp_filename, const std::string& binary_filename) {
+    const std::string command = "c++ -std=c++26 "
+        + shellQuote(cpp_filename)
+        + " -o "
+        + shellQuote(binary_filename);
 
-    std::cout << "Lexing file: " << filename << "\n";
+    return std::system(command.c_str());
+}
+
+static int runCompiler(const CliOptions& options) {
+    const std::string& filename = options.filename;
+    std::cout << "C-Prime Compiler\n";
 
     if (!fileExists(filename)) {
         std::cout << "Error: File " << filename << " does not exist.\n";
-        return 1;
+        return EXIT_FAILURE;
     }
 
     Tokens tokens = lexFile(filename);
 
-    if (debug) {
-        std::cout << "Found " << tokens.size() << " tokens:\n";
-
-        for (const auto& token : tokens) {
-            std::cout << "\ttoken type: " << tokenCategoryName(token->type)
-                      << "\tloc:\t" << token->line << ":" << token->column
-                      << "\ttoken:\t" << token->value << "\n";
-        }
+    if (options.debug) {
+        printTokens(tokens);
     }
 
     Phrases phrases = preparseTokens(tokens);
 
-    if (debug) {
-        std::cout << "Found " << phrases.size() << " phrases:\n";
-        for (const auto& phrase : phrases) {
-            printPhraseTree(phrase);
-        }
+    if (options.debug) {
+        printPhrases(phrases);
     }
 
     try {
         ParsedPhrases parsed_phrases = parsePhrases(phrases);
-        if (debug) {
-            std::cout << "Found " << parsed_phrases.size() << " parsed phrases:\n";
-            for (const auto& parsed_phrase : parsed_phrases) {
-                printParsedPhraseTree(parsed_phrase);
-            }
+        if (options.debug) {
+            printParsedPhrases(parsed_phrases);
         }
 
         SemanticProgram semantic_program = buildSemanticProgram(parsed_phrases);
-        std::cout << "Semantic analysis completed successfully.\n";
-        std::cout << "Built semantic IR: "
-                  << semantic_program.functions.size() << " functions, "
-                  << semantic_program.type_definitions.size() << " type definitions, "
-                  << semantic_program.struct_definitions.size() << " struct definitions, "
-                  << semantic_program.enum_definitions.size() << " enum definitions\n";
+
+        if (options.debug) {
+            printSemanticSummary(semantic_program);
+        }
 
         CppEmitResult emitted = emitCpp(semantic_program);
-        const std::string output_filename = filename + ".generated.cpp";
-        std::ofstream generated_file(output_filename);
-        generated_file << emitted.code;
-        generated_file.close();
+        const std::string output_filename = defaultCppOutputFilename(options);
+        writeTextFile(output_filename, emitted.code);
 
-        std::cout << "Generated C++ written to: " << output_filename << "\n";
-        std::cout << "Source map entries: " << emitted.source_map.size() << "\n";
+        if (shouldEmitCppFile(options)) {
+            std::cout << "Generated C++ written to: " << output_filename << "\n";
+        }
+
+        if (shouldCompileBinary(options)) {
+            const std::string binary_filename = defaultBinaryFilename(options);
+            const int compile_result = compileCppFile(output_filename, binary_filename);
+            if (compile_result != 0) {
+                std::cout << "Error: C++ compilation failed.\n";
+                return EXIT_FAILURE;
+            }
+
+            std::cout << "Compiled binary written to: " << binary_filename << "\n";
+        }
+
+        if (options.mode == CliMode::CompileOnly) {
+            removeFile(output_filename);
+        }
+
+        if (options.debug) {
+            std::cout << "Source map entries: " << emitted.source_map.size() << "\n";
+        }
     } catch (const std::exception& error) {
         std::cerr << error.what() << "\n";
-        return 1;
+        return EXIT_FAILURE;
     }
 
     return 0;
+}
+
+int main(int argc, char* argv[]) {
+    const CliOptions options = parseCliOptions(argc, argv);
+
+    if (options.help) {
+        std::cout << usageText(argv[0]);
+        return EXIT_SUCCESS;
+    }
+
+    if (!options.valid) {
+        std::cout << usageText(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    return runCompiler(options);
 }

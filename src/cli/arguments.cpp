@@ -1,0 +1,96 @@
+#pragma once
+
+#include <string>
+
+enum class CliMode {
+    EmitCpp,
+    CompileOnly,
+    EmitAndCompile
+};
+
+struct CliOptions {
+    bool debug = false;
+    bool help = false;
+    bool valid = true;
+    CliMode mode = CliMode::EmitCpp;
+    std::string filename = "";
+    std::string output_filename = "";
+    std::string binary_filename = "";
+};
+
+static std::string usageText(const char* executable) {
+    return "Usage: " + std::string(executable) + " [OPTIONS] <cprime-file>\n"
+           "\n"
+           "Modes:\n"
+           "    --emit-cpp              Generate C++ only (default)\n"
+           "    --compile               Compile to a binary only\n"
+           "    --emit-and-compile      Generate C++ and compile a binary\n"
+           "\n"
+           "Output:\n"
+           "    --output, -o <file>     C++ output filename (default: <cprime-file>.cpp)\n"
+           "    --binary, -b <file>     Binary filename (default: <cprime-file without extension>)\n"
+           "\n"
+           "Other:\n"
+           "    --debug                 Print compiler pipeline debug output\n"
+           "    --help, -h              Show this help text\n";
+}
+
+static CliOptions parseCliOptions(int argc, char* argv[]) {
+    CliOptions options{};
+
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--debug") {
+            options.debug = true;
+            continue;
+        }
+        if (arg == "--help" || arg == "-h") {
+            options.help = true;
+            continue;
+        }
+        if (arg == "--emit-cpp") {
+            options.mode = CliMode::EmitCpp;
+            continue;
+        }
+        if (arg == "--compile") {
+            options.mode = CliMode::CompileOnly;
+            continue;
+        }
+        if (arg == "--emit-and-compile") {
+            options.mode = CliMode::EmitAndCompile;
+            continue;
+        }
+        if (arg == "--output" || arg == "-o") {
+            if (i + 1 < argc) {
+                options.output_filename = argv[i + 1];
+                i++;
+                continue;
+            } else {
+                options.valid = false;
+                continue;
+            }
+        }
+        if (arg == "--binary" || arg == "-b") {
+            if (i + 1 < argc) {
+                options.binary_filename = argv[i + 1];
+                i++;
+                continue;
+            } else {
+                options.valid = false;
+                continue;
+            }
+        }
+
+        if (options.filename.empty()) {
+            options.filename = arg;
+        } else {
+            options.valid = false;
+        }
+    }
+
+    if (!options.help && options.filename.empty()) {
+        options.valid = false;
+    }
+
+    return options;
+}
