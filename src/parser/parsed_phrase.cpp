@@ -14,6 +14,7 @@ enum class ParsedPhraseKind {
     TypeDefinition,
     StructDefinition,
     EnumDefinition,
+    UnionDefinition,
     Assignment,
     ParameterDefinition,
     EnumValueDefinition,
@@ -65,6 +66,8 @@ struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
                 return "StructDefinition";
             case ParsedPhraseKind::EnumDefinition:
                 return "EnumDefinition";
+            case ParsedPhraseKind::UnionDefinition:
+                return "UnionDefinition";
             case ParsedPhraseKind::Assignment:
                 return "Assignment";
             case ParsedPhraseKind::ParameterDefinition:

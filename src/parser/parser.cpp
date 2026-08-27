@@ -18,6 +18,7 @@
 #include "phrases/statement.cpp"
 #include "phrases/struct_definition.cpp"
 #include "phrases/type_definition.cpp"
+#include "phrases/union_definition.cpp"
 #include "phrases/variable_declaration.cpp"
 
 static std::string trimParserText(const std::string& text) {
@@ -107,6 +108,7 @@ static bool isDeclarationStarter(const std::string& value) {
         || value == "type"
         || value == "struct"
         || value == "enum"
+        || value == "union"
         || value == "function"
         || value == "import";
 }
@@ -170,7 +172,8 @@ static void validatePhrase(const std::shared_ptr<Phrase>& phrase, ParsedPhraseKi
         return;
     }
 
-    if (!phrase->tokens.empty() && phrase->tokens[0] && phrase->tokens[0]->value == "function") {
+    if (!phrase->tokens.empty() && phrase->tokens[0]
+        && (phrase->tokens[0]->value == "function" || phrase->tokens[0]->value == "template")) {
         return;
     }
 
@@ -214,11 +217,93 @@ static bool isFunctionPhrase(const std::shared_ptr<Phrase>& phrase, size_t& open
         return false;
     }
 
-    if (phrase->tokens[0] && phrase->tokens[0]->value == "function") {
-        return findParentheses(phrase->tokens, open_paren, close_paren);
+    const bool has_template_prefix = phrase->tokens[0] && phrase->tokens[0]->value == "template";
+    const size_t function_index = findTokenIndex(phrase->tokens, "function");
+    if ((has_template_prefix || (function_index == 0)) && function_index != phrase->tokens.size()) {
+        return findParentheses(phrase->tokens, open_paren, close_paren) && open_paren > function_index;
     }
 
     return false;
+}
+
+static bool isTemplateTypeCategory(const std::string& name) {
+    return name == "Integral" || name == "Floating";
+}
+
+static std::vector<ParsedTemplateParameter> parseTemplateParameters(const Tokens& tokens, size_t function_index) {
+    if (function_index == 0) {
+        return {};
+    }
+
+    if (!tokens[0] || tokens[0]->value != "template" || function_index < 5
+        || !tokens[1] || tokens[1]->value != "<"
+        || !tokens[function_index - 1] || tokens[function_index - 1]->value != ">") {
+        throw std::runtime_error("Parser error: invalid template declaration");
+    }
+
+    std::vector<ParsedTemplateParameter> parameters;
+    size_t index = 2;
+    while (index < function_index - 1) {
+        if (!tokens[index] || tokens[index]->value != "type" || index + 1 >= function_index - 1 || !tokens[index + 1]) {
+            throw std::runtime_error("Parser error: template parameters must use 'type Name'");
+        }
+
+        ParsedTemplateParameter parameter{};
+        parameter.name = tokens[index + 1]->value;
+        const bool duplicate_name = std::any_of(parameters.begin(), parameters.end(), [&](const ParsedTemplateParameter& existing) {
+            return existing.name == parameter.name;
+        });
+        if (parameter.name.empty() || duplicate_name) {
+            throw std::runtime_error("Parser error: duplicate or empty template parameter '" + parameter.name + "'");
+        }
+        index += 2;
+
+        if (index < function_index - 1 && tokens[index] && tokens[index]->value == ":") {
+            ++index;
+            while (index < function_index - 1) {
+                if (!tokens[index]) {
+                    throw std::runtime_error("Parser error: invalid template type constraint");
+                }
+
+                const std::string constraint = tokens[index]->value;
+                if (isTemplateTypeCategory(constraint)) {
+                    if (!parameter.allowed_types.empty() || !parameter.category.empty()) {
+                        throw std::runtime_error("Parser error: template category cannot be combined with other constraints");
+                    }
+                    parameter.category = constraint;
+                } else {
+                    if (!parameter.category.empty()) {
+                        throw std::runtime_error("Parser error: template category cannot be combined with other constraints");
+                    }
+                    parameter.allowed_types.push_back(constraint);
+                }
+                ++index;
+
+                if (index >= function_index - 1 || !tokens[index] || tokens[index]->value != "|") {
+                    break;
+                }
+                ++index;
+            }
+
+            if (parameter.allowed_types.empty() && parameter.category.empty()) {
+                throw std::runtime_error("Parser error: template constraint cannot be empty");
+            }
+        }
+
+        parameters.push_back(parameter);
+        if (index < function_index - 1) {
+            if (!tokens[index] || tokens[index]->value != ",") {
+                throw std::runtime_error("Parser error: expected ',' between template parameters");
+            }
+            ++index;
+        }
+    }
+
+    if (parameters.empty()) {
+        throw std::runtime_error("Parser error: template declaration needs at least one type parameter");
+    }
+
+    return parameters;
 }
 
 static bool isTypeDefinitionPhrase(const std::shared_ptr<Phrase>& phrase) {
@@ -231,6 +316,21 @@ static bool isStructDefinitionPhrase(const std::shared_ptr<Phrase>& phrase) {
 
 static bool isEnumDefinitionPhrase(const std::shared_ptr<Phrase>& phrase) {
     return phrase && phrase->tokens.size() >= 2 && phrase->tokens[0] && phrase->tokens[0]->value == "enum";
+}
+
+static bool isUnionDefinitionPhrase(const std::shared_ptr<Phrase>& phrase) {
+    return phrase && phrase->tokens.size() >= 4 && phrase->tokens[0] && phrase->tokens[0]->value == "union" && hasTokenValue(phrase->tokens, ":");
+}
+
+static std::vector<std::string> parseUnionMembers(const Tokens& tokens, size_t colon_index) {
+    std::vector<std::string> members;
+    for (size_t i = colon_index + 1; i < tokens.size(); ++i) {
+        if (!tokens[i] || tokens[i]->value == "|") {
+            continue;
+        }
+        members.push_back(tokens[i]->value);
+    }
+    return members;
 }
 
 static bool isVariableDeclarationPhrase(const std::shared_ptr<Phrase>& phrase) {
@@ -331,52 +431,6 @@ static bool isAssignmentPhrase(const std::shared_ptr<Phrase>& phrase) {
     }
 
     return equal_index == 1;
-}
-
-static bool isBuiltinCallPhrase(const std::shared_ptr<Phrase>& phrase) {
-    if (!phrase || phrase->tokens.size() < 3) {
-        return false;
-    }
-
-    if (!phrase->tokens[0]) {
-        return false;
-    }
-
-    const std::string name = phrase->tokens[0]->value;
-    if (name != "print" && name != "println") {
-        return false;
-    }
-
-    size_t open_paren = phrase->tokens.size();
-    size_t close_paren = phrase->tokens.size();
-
-    for (size_t i = 0; i < phrase->tokens.size(); ++i) {
-        if (!phrase->tokens[i]) {
-            continue;
-        }
-
-        if (phrase->tokens[i]->value == "(") {
-            open_paren = i;
-            break;
-        }
-    }
-
-    if (open_paren == phrase->tokens.size()) {
-        return false;
-    }
-
-    for (size_t i = open_paren + 1; i < phrase->tokens.size(); ++i) {
-        if (!phrase->tokens[i]) {
-            continue;
-        }
-
-        if (phrase->tokens[i]->value == ")") {
-            close_paren = i;
-            break;
-        }
-    }
-
-    return close_paren != phrase->tokens.size() && close_paren == phrase->tokens.size() - 1;
 }
 
 static bool isCallPhrase(const std::shared_ptr<Phrase>& phrase) {
@@ -650,7 +704,8 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
     } else if (isFunctionPhrase(phrase, open_paren, close_paren) && open_paren > 1 && phrase->tokens[open_paren - 1]) {
         const std::string function_name = phrase->tokens[open_paren - 1]->value;
         const std::string return_type = parseFunctionReturnType(phrase->tokens, close_paren);
-        auto function = std::make_shared<ParsedFunction>(function_name, return_type, phrase);
+        const size_t function_index = findTokenIndex(phrase->tokens, "function");
+        auto function = std::make_shared<ParsedFunction>(function_name, return_type, parseTemplateParameters(phrase->tokens, function_index), phrase);
         parseFunctionParameters(phrase->tokens, open_paren, close_paren, phrase, function);
         parsed_phrase = function;
     } else if (isTypeDefinitionPhrase(phrase)) {
@@ -664,6 +719,10 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
     } else if (isEnumDefinitionPhrase(phrase)) {
         const std::string enum_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
         parsed_phrase = std::make_shared<ParsedEnumDefinition>(enum_name, phrase);
+    } else if (isUnionDefinitionPhrase(phrase)) {
+        const std::string union_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
+        const size_t colon_index = findTokenIndex(phrase->tokens, ":");
+        parsed_phrase = std::make_shared<ParsedUnionDefinition>(union_name, parseUnionMembers(phrase->tokens, colon_index), phrase);
     } else if (isKeywordPhrase(phrase, "if")) {
         parsed_phrase = std::make_shared<ParsedIfStatement>(parseParenthesizedContent(phrase->tokens), phrase);
     } else if (isKeywordPhrase(phrase, "while")) {
@@ -704,7 +763,7 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
         const std::string right = joinTokenRange(phrase->tokens, equal_index + 1, phrase->tokens.size());
         const std::string operator_symbol = phrase->tokens[equal_index] ? phrase->tokens[equal_index]->value : "=";
         parsed_phrase = std::make_shared<ParsedAssignment>(left, right, operator_symbol, phrase);
-    } else if (isBuiltinCallPhrase(phrase) || isCallPhrase(phrase)) {
+    } else if (isCallPhrase(phrase)) {
         size_t open_paren = phrase->tokens.size();
         size_t close_paren = phrase->tokens.size();
 

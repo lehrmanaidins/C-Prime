@@ -62,7 +62,7 @@
       "patterns": [
         {
           "name": "keyword.control.cprime",
-          "match": "\\b(?:if|else|switch|case|default|for|foreach|while|do|loop|break|continue|limit|return|requires|ensures|release|debug|unsafe|const|mutable|type|struct|enum|function|void|true|false|null|import)\\b"
+          "match": "\\b(?:if|else|switch|case|default|for|foreach|while|do|loop|break|continue|limit|return|requires|ensures|release|debug|unsafe|const|mutable|type|struct|enum|union|function|void|true|false|null|import)\\b"
         }
       ]
     },

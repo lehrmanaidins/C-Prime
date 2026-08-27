@@ -25,6 +25,7 @@
 #include "../parser/phrases/statement.cpp"
 #include "../parser/phrases/struct_definition.cpp"
 #include "../parser/phrases/type_definition.cpp"
+#include "../parser/phrases/union_definition.cpp"
 #include "../parser/phrases/variable_declaration.cpp"
 #include "expression.cpp"
 #include "type_ref.cpp"
@@ -147,9 +148,16 @@ struct SemanticElseIR {
     SourceLocation location;
 };
 
+struct SemanticTemplateParameterIR {
+    std::string name;
+    std::vector<SemanticTypeRef> allowed_types;
+    std::string category;
+};
+
 struct SemanticFunctionIR {
     std::string name;
     SemanticTypeRef return_type;
+    std::vector<SemanticTemplateParameterIR> template_parameters;
     std::vector<SemanticParameterIR> parameters;
 
     std::vector<SemanticVariableDeclarationIR> variable_declarations;
@@ -189,7 +197,8 @@ enum class TypeSymbolKind {
     Primitive,
     Domain,
     Struct,
-    Enum
+    Enum,
+    Union
 };
 
 struct TypeSymbol {
@@ -202,11 +211,20 @@ struct VariableSymbol {
     bool is_mutable;
 };
 
+struct TemplateTypeConstraint {
+    std::vector<std::string> allowed_types;
+    std::string category;
+};
+
 struct SemanticSymbolTable {
     std::unordered_map<std::string, TypeSymbol> known_types;
     std::unordered_set<std::string> known_functions;
     std::unordered_map<std::string, std::string> function_return_types;
     std::unordered_map<std::string, size_t> function_parameter_counts;
+    std::unordered_map<std::string, std::vector<std::string>> function_parameter_types;
+    std::unordered_map<std::string, std::unordered_map<std::string, TemplateTypeConstraint>> function_template_constraints;
+    std::unordered_map<std::string, std::vector<std::string>> union_members;
+    std::unordered_set<std::string> variadic_functions;
     std::unordered_map<std::string, VariableSymbol> external_values;
     bool has_cpp_imports = false;
 };
@@ -214,6 +232,7 @@ struct SemanticSymbolTable {
 struct ValidationContext {
     const SemanticSymbolTable& symbols;
     std::vector<std::unordered_map<std::string, VariableSymbol>> variable_scopes;
+    std::unordered_set<std::string> template_type_parameters;
     std::string current_function_return_type;
     size_t loop_depth = 0;
 };
@@ -271,10 +290,30 @@ static bool isKnownType(const SemanticSymbolTable& symbols, const std::string& r
     return symbols.known_types.find(type) != symbols.known_types.end();
 }
 
-static bool isKnownTypeRef(const SemanticSymbolTable& symbols, const SemanticTypeRef& type_ref) {
+static bool isKnownTypeRef(
+    const SemanticSymbolTable& symbols,
+    const SemanticTypeRef& type_ref,
+    const std::unordered_set<std::string>& template_type_parameters = {}
+) {
     if (type_ref.kind == SemanticTypeKind::Tuple) {
         for (const auto& element : type_ref.tuple_elements) {
-            if (!isKnownTypeRef(symbols, element)) {
+            if (!isKnownTypeRef(symbols, element, template_type_parameters)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    if (type_ref.kind == SemanticTypeKind::Reference) {
+        return type_ref.reference_target && isKnownTypeRef(symbols, *type_ref.reference_target, template_type_parameters);
+    }
+
+    if (type_ref.kind == SemanticTypeKind::Function) {
+        if (!type_ref.function_return_type || !isKnownTypeRef(symbols, *type_ref.function_return_type, template_type_parameters)) {
+            return false;
+        }
+        for (const auto& parameter : type_ref.function_parameters) {
+            if (!isKnownTypeRef(symbols, parameter, template_type_parameters)) {
                 return false;
             }
         }
@@ -285,11 +324,21 @@ static bool isKnownTypeRef(const SemanticSymbolTable& symbols, const SemanticTyp
         return false;
     }
 
-    return symbols.known_types.find(normalizeTypeName(type_ref.name)) != symbols.known_types.end();
+    const std::string name = normalizeTypeName(type_ref.name);
+    return symbols.known_types.find(name) != symbols.known_types.end()
+        || template_type_parameters.find(name) != template_type_parameters.end();
 }
 
-static bool isKnownTypeRefString(const SemanticSymbolTable& symbols, const std::string& raw_type) {
-    return isKnownTypeRef(symbols, parseTypeRef(raw_type));
+static bool isKnownTypeRefString(
+    const SemanticSymbolTable& symbols,
+    const std::string& raw_type,
+    const std::unordered_set<std::string>& template_type_parameters = {}
+) {
+    return isKnownTypeRef(symbols, parseTypeRef(raw_type), template_type_parameters);
+}
+
+static bool isTypeUnion(const SemanticSymbolTable& symbols, const std::string& raw_type) {
+    return symbols.union_members.find(normalizeTypeName(raw_type)) != symbols.union_members.end();
 }
 
 static void enterScope(ValidationContext& context) {
@@ -364,6 +413,18 @@ static void collectSymbolsFromFunction(const std::shared_ptr<ParsedFunction>& fu
     symbols.known_functions.insert(function_phrase->name);
     symbols.function_return_types[function_phrase->name] = normalizeTypeName(function_phrase->return_type.empty() ? "void" : function_phrase->return_type);
     symbols.function_parameter_counts[function_phrase->name] = function_phrase->parameters.size();
+    for (const auto& parameter : function_phrase->parameters) {
+        auto parameter_declaration = std::dynamic_pointer_cast<ParsedParameterDeclaration>(parameter);
+        if (parameter_declaration) {
+            symbols.function_parameter_types[function_phrase->name].push_back(normalizeTypeName(parameter_declaration->type_name));
+        }
+    }
+    for (const auto& parameter : function_phrase->template_parameters) {
+        symbols.function_template_constraints[function_phrase->name].insert({
+            parameter.name,
+            TemplateTypeConstraint{parameter.allowed_types, parameter.category}
+        });
+    }
 
     for (const auto& nested : function_phrase->nested_phrases) {
         collectSymbolsFromPhrase(nested, symbols);
@@ -421,6 +482,14 @@ static void collectSymbolsFromPhrase(const std::shared_ptr<ParsedPhrase>& phrase
             }
             break;
         }
+        case ParsedPhraseKind::UnionDefinition: {
+            auto union_def = std::dynamic_pointer_cast<ParsedUnionDefinition>(phrase);
+            if (union_def) {
+                registerTypeSymbol(phrase, union_def->name, TypeSymbol{TypeSymbolKind::Union, ""}, symbols);
+                symbols.union_members.insert({union_def->name, union_def->members});
+            }
+            break;
+        }
         case ParsedPhraseKind::ImportStatement: {
             auto import_statement = std::dynamic_pointer_cast<ParsedImportStatement>(phrase);
             if (import_statement && import_statement->import_kind == ParsedImportKind::Cpp) {
@@ -434,6 +503,42 @@ static void collectSymbolsFromPhrase(const std::shared_ptr<ParsedPhrase>& phrase
                 collectSymbolsFromPhrase(nested, symbols);
             }
             break;
+    }
+}
+
+static void validateTypeUnionMembers(const SemanticSymbolTable& symbols) {
+    std::unordered_set<std::string> visited;
+    std::unordered_set<std::string> visiting;
+
+    auto validate_union = [&](auto&& self, const std::string& name) -> void {
+        if (visited.find(name) != visited.end()) {
+            return;
+        }
+        if (!visiting.insert(name).second) {
+            throw std::runtime_error("Semantic error: cyclic union definition involving '" + name + "'");
+        }
+
+        const auto members_it = symbols.union_members.find(name);
+        if (members_it == symbols.union_members.end() || members_it->second.empty()) {
+            throw std::runtime_error("Semantic error: union '" + name + "' must declare at least one member type");
+        }
+        for (const auto& member : members_it->second) {
+            const std::string normalized_member = normalizeTypeName(member);
+            if (symbols.known_types.find(normalized_member) == symbols.known_types.end()) {
+                throw std::runtime_error("Semantic error: unknown union member type '" + member + "' in union '" + name + "'");
+            }
+            if (symbols.union_members.find(normalized_member) != symbols.union_members.end()) {
+                self(self, normalized_member);
+            }
+        }
+
+        visiting.erase(name);
+        visited.insert(name);
+    };
+
+    for (const auto& [name, members] : symbols.union_members) {
+        (void)members;
+        validate_union(validate_union, name);
     }
 }
 
@@ -484,7 +589,70 @@ static std::optional<std::string> inferExpressionTypeName(
 static bool isNumericPrimitive(const std::string& type_name) {
     return type_name == "int8" || type_name == "int16" || type_name == "int32" || type_name == "int64"
         || type_name == "uint8" || type_name == "uint16" || type_name == "uint32" || type_name == "uint64"
-        || type_name == "float32" || type_name == "float64";
+        || type_name == "float16" || type_name == "float32" || type_name == "float64" || type_name == "float128";
+}
+
+static bool isTemplateConstraintMatch(
+    const std::string& type_name,
+    const TemplateTypeConstraint& constraint,
+    const SemanticSymbolTable& symbols,
+    std::unordered_set<std::string>& resolving_unions
+) {
+    const std::string normalized_type = normalizeTypeName(type_name);
+    if (constraint.category == "Integral") {
+        return normalized_type == "int8" || normalized_type == "int16" || normalized_type == "int32" || normalized_type == "int64"
+            || normalized_type == "uint8" || normalized_type == "uint16" || normalized_type == "uint32" || normalized_type == "uint64";
+    }
+    if (constraint.category == "Floating") {
+        return normalized_type == "float32" || normalized_type == "float64";
+    }
+
+    return std::find_if(constraint.allowed_types.begin(), constraint.allowed_types.end(), [&](const std::string& allowed_type) {
+        const std::string normalized_allowed = normalizeTypeName(allowed_type);
+        if (normalized_allowed == normalized_type) {
+            return true;
+        }
+        const auto members_it = symbols.union_members.find(normalized_allowed);
+        if (members_it == symbols.union_members.end() || !resolving_unions.insert(normalized_allowed).second) {
+            return false;
+        }
+        const TemplateTypeConstraint nested_constraint{members_it->second, ""};
+        const bool matches = isTemplateConstraintMatch(normalized_type, nested_constraint, symbols, resolving_unions);
+        resolving_unions.erase(normalized_allowed);
+        return matches;
+    }) != constraint.allowed_types.end();
+}
+
+static void validateTemplateCallConstraints(
+    const std::shared_ptr<ParsedPhrase>& phrase,
+    const std::string& function_name,
+    const std::vector<SemanticExpressionIR>& arguments,
+    ValidationContext& context
+) {
+    const auto constraints_it = context.symbols.function_template_constraints.find(function_name);
+    const auto parameter_types_it = context.symbols.function_parameter_types.find(function_name);
+    if (constraints_it == context.symbols.function_template_constraints.end()
+        || parameter_types_it == context.symbols.function_parameter_types.end()) {
+        return;
+    }
+
+    const auto& constraints = constraints_it->second;
+    const auto& parameter_types = parameter_types_it->second;
+    for (size_t i = 0; i < arguments.size() && i < parameter_types.size(); ++i) {
+        const auto constraint_it = constraints.find(parameter_types[i]);
+        if (constraint_it == constraints.end()) {
+            continue;
+        }
+
+        const std::optional<std::string> argument_type = inferExpressionTypeName(arguments[i], context);
+        std::unordered_set<std::string> resolving_unions;
+        if (argument_type.has_value() && !isTemplateConstraintMatch(argument_type.value(), constraint_it->second, context.symbols, resolving_unions)) {
+            throw semanticError(
+                phrase,
+                "template parameter '" + parameter_types[i] + "' does not allow argument type '" + argument_type.value() + "'"
+            );
+        }
+    }
 }
 
 static std::optional<std::string> expressionRootIdentifier(const SemanticExpressionIR& expression) {
@@ -540,12 +708,13 @@ static void validateExpression(
     if (expression.kind == SemanticExpressionKind::Call) {
         if (context.symbols.known_functions.find(expression.operator_symbol) == context.symbols.known_functions.end()) {
             throw semanticError(phrase, "unknown function '" + expression.operator_symbol + "'");
-        } else if (expression.operator_symbol != "print" && expression.operator_symbol != "println") {
+        } else if (context.symbols.variadic_functions.find(expression.operator_symbol) == context.symbols.variadic_functions.end()) {
             auto arity = context.symbols.function_parameter_counts.find(expression.operator_symbol);
             if (arity != context.symbols.function_parameter_counts.end() && arity->second != expression.children.size()) {
                 throw semanticError(phrase, "function '" + expression.operator_symbol + "' expects " + std::to_string(arity->second) + " argument(s), got " + std::to_string(expression.children.size()));
             }
         }
+        validateTemplateCallConstraints(phrase, expression.operator_symbol, expression.children, context);
     }
 
     for (const auto& child : expression.children) {
@@ -686,7 +855,20 @@ static void analyzeFunction(
     }
 
     const std::string return_type = normalizeTypeName(function_phrase->return_type.empty() ? "void" : function_phrase->return_type);
-    if (context.symbols.known_types.find(return_type) == context.symbols.known_types.end()) {
+    for (const auto& parameter : function_phrase->template_parameters) {
+        if (context.symbols.known_types.find(parameter.name) != context.symbols.known_types.end()
+            || !context.template_type_parameters.insert(parameter.name).second) {
+            throw semanticError(function_phrase, "duplicate template type parameter '" + parameter.name + "'");
+        }
+        for (const auto& allowed_type : parameter.allowed_types) {
+            if (!isKnownTypeRefString(context.symbols, allowed_type)) {
+                throw semanticError(function_phrase, "unknown template constraint type '" + allowed_type + "'");
+            }
+        }
+    }
+
+    if (isTypeUnion(context.symbols, function_phrase->return_type)
+        || !isKnownTypeRefString(context.symbols, function_phrase->return_type.empty() ? "void" : function_phrase->return_type, context.template_type_parameters)) {
         throw semanticError(function_phrase, "unknown function return type '" + function_phrase->return_type + "' in phrase: " + joinPhraseText(function_phrase));
     }
 
@@ -698,6 +880,9 @@ static void analyzeFunction(
 
     leaveScope(context);
     context.current_function_return_type = previous_return_type;
+    for (const auto& parameter : function_phrase->template_parameters) {
+        context.template_type_parameters.erase(parameter.name);
+    }
 }
 
 static void analyzeVariableDeclaration(
@@ -709,7 +894,8 @@ static void analyzeVariableDeclaration(
     }
 
     const std::string variable_type = normalizeTypeName(variable_phrase->type_name);
-    if (!isKnownTypeRefString(context.symbols, variable_phrase->type_name)) {
+    if (isTypeUnion(context.symbols, variable_phrase->type_name)
+        || !isKnownTypeRefString(context.symbols, variable_phrase->type_name, context.template_type_parameters)) {
         throw semanticError(variable_phrase, "unknown variable type '" + variable_phrase->type_name + "' in phrase: " + joinPhraseText(variable_phrase));
     }
 
@@ -814,6 +1000,21 @@ static void analyzeEnumDefinition(
     }
 }
 
+static void analyzeUnionDefinition(
+    const std::shared_ptr<ParsedUnionDefinition>& union_phrase,
+    ValidationContext& context
+) {
+    if (!union_phrase || union_phrase->members.empty()) {
+        throw semanticError(union_phrase, "union must declare at least one member type");
+    }
+
+    for (const auto& member : union_phrase->members) {
+        if (!isKnownTypeRefString(context.symbols, member)) {
+            throw semanticError(union_phrase, "unknown union member type '" + member + "'");
+        }
+    }
+}
+
 static void analyzeAssignment(
     const std::shared_ptr<ParsedAssignment>& assignment_phrase,
     ValidationContext& context
@@ -855,7 +1056,8 @@ static void analyzeParameterDeclaration(
     }
 
     const std::string parameter_type = normalizeTypeName(parameter_phrase->type_name);
-    if (!isKnownTypeRefString(context.symbols, parameter_phrase->type_name)) {
+    if (isTypeUnion(context.symbols, parameter_phrase->type_name)
+        || !isKnownTypeRefString(context.symbols, parameter_phrase->type_name, context.template_type_parameters)) {
         throw semanticError(parameter_phrase, "unknown parameter type '" + parameter_phrase->type_name + "' in phrase: " + joinPhraseText(parameter_phrase));
     }
 
@@ -878,7 +1080,7 @@ static void analyzeCallStatement(
 
     if (context.symbols.known_functions.find(call_phrase->name) == context.symbols.known_functions.end()) {
         throw semanticError(call_phrase, "unknown function '" + call_phrase->name + "'");
-    } else if (call_phrase->name != "print" && call_phrase->name != "println") {
+    } else if (context.symbols.variadic_functions.find(call_phrase->name) == context.symbols.variadic_functions.end()) {
         auto arity = context.symbols.function_parameter_counts.find(call_phrase->name);
         if (arity != context.symbols.function_parameter_counts.end() && arity->second != call_phrase->arguments.size()) {
             throw semanticError(call_phrase, "function '" + call_phrase->name + "' expects " + std::to_string(arity->second) + " argument(s), got " + std::to_string(call_phrase->arguments.size()));
@@ -888,6 +1090,12 @@ static void analyzeCallStatement(
     for (const auto& argument : call_phrase->arguments) {
         validateExpression(call_phrase, parseExpressionIR(argument, phraseStartLocation(call_phrase)), context);
     }
+
+    std::vector<SemanticExpressionIR> arguments;
+    for (const auto& argument : call_phrase->arguments) {
+        arguments.push_back(parseExpressionIR(argument, phraseStartLocation(call_phrase)));
+    }
+    validateTemplateCallConstraints(call_phrase, call_phrase->name, arguments, context);
 }
 
 static void analyzeReturnStatement(
@@ -941,6 +1149,9 @@ static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, Validatio
             break;
         case ParsedPhraseKind::EnumDefinition:
             analyzeEnumDefinition(std::dynamic_pointer_cast<ParsedEnumDefinition>(phrase), context);
+            break;
+        case ParsedPhraseKind::UnionDefinition:
+            analyzeUnionDefinition(std::dynamic_pointer_cast<ParsedUnionDefinition>(phrase), context);
             break;
         case ParsedPhraseKind::ImportStatement:
             break;
@@ -1016,19 +1227,14 @@ static SemanticSymbolTable collectSymbols(const ParsedPhrases& phrases) {
 
     const std::vector<std::string> primitive_types = {
         "bool", "char8", "char16", "char32", "int8", "int16", "int32", "int64",
-        "uint8", "uint16", "uint32", "uint64", "float32", "float64", "void"
+        "uint8", "uint16", "uint32", "uint64", "float16", "float32", "float64", "float128", "void"
     };
 
     for (const auto& primitive : primitive_types) {
         symbols.known_types.insert({primitive, TypeSymbol{TypeSymbolKind::Primitive, ""}});
     }
 
-    symbols.known_functions.insert("print");
-    symbols.known_functions.insert("println");
-    symbols.function_return_types["print"] = "void";
-    symbols.function_return_types["println"] = "void";
-    symbols.function_parameter_counts["print"] = 0;
-    symbols.function_parameter_counts["println"] = 0;
+    registerRuntimeSymbols(symbols);
 
     for (const auto& phrase : phrases) {
         collectSymbolsFromPhrase(phrase, symbols);
@@ -1352,10 +1558,42 @@ static void lowerBodyPhrases(
     }
 }
 
-static SemanticFunctionIR lowerFunction(const std::shared_ptr<ParsedFunction>& phrase) {
+static void expandUnionMembers(
+    const SemanticSymbolTable& symbols,
+    const std::string& type_name,
+    std::vector<std::string>& expanded_types
+) {
+    const auto union_it = symbols.union_members.find(normalizeTypeName(type_name));
+    if (union_it == symbols.union_members.end()) {
+        expanded_types.push_back(type_name);
+        return;
+    }
+
+    for (const auto& member : union_it->second) {
+        expandUnionMembers(symbols, member, expanded_types);
+    }
+}
+
+static SemanticFunctionIR lowerFunction(
+    const std::shared_ptr<ParsedFunction>& phrase,
+    const SemanticSymbolTable& symbols
+) {
     SemanticFunctionIR function_ir{};
     function_ir.name = phrase->name;
     function_ir.return_type = phrase->return_type.empty() ? parseTypeRef("void") : parseTypeRef(phrase->return_type);
+    for (const auto& parameter : phrase->template_parameters) {
+        SemanticTemplateParameterIR template_parameter{};
+        template_parameter.name = parameter.name;
+        template_parameter.category = parameter.category;
+        for (const auto& allowed_type : parameter.allowed_types) {
+            std::vector<std::string> expanded_types;
+            expandUnionMembers(symbols, allowed_type, expanded_types);
+            for (const auto& expanded_type : expanded_types) {
+                template_parameter.allowed_types.push_back(parseTypeRef(expanded_type));
+            }
+        }
+        function_ir.template_parameters.push_back(template_parameter);
+    }
     function_ir.location = phraseStartLocation(phrase);
 
     for (const auto& nested : phrase->nested_phrases) {
@@ -1397,14 +1635,18 @@ static SemanticFunctionIR lowerFunction(const std::shared_ptr<ParsedFunction>& p
     return function_ir;
 }
 
-static void lowerTopLevelPhrase(const std::shared_ptr<ParsedPhrase>& phrase, SemanticProgram& program) {
+static void lowerTopLevelPhrase(
+    const std::shared_ptr<ParsedPhrase>& phrase,
+    SemanticProgram& program,
+    const SemanticSymbolTable& symbols
+) {
     if (!phrase) {
         return;
     }
 
     switch (phrase->kind) {
         case ParsedPhraseKind::Function:
-            program.functions.push_back(lowerFunction(std::dynamic_pointer_cast<ParsedFunction>(phrase)));
+            program.functions.push_back(lowerFunction(std::dynamic_pointer_cast<ParsedFunction>(phrase), symbols));
             break;
         case ParsedPhraseKind::VariableDeclaration: {
             program.global_variables.push_back(lowerVariableDeclaration(std::dynamic_pointer_cast<ParsedVariableDeclaration>(phrase)));
@@ -1446,11 +1688,12 @@ static void lowerTopLevelPhrase(const std::shared_ptr<ParsedPhrase>& phrase, Sem
 
 SemanticProgram buildSemanticProgram(const ParsedPhrases& phrases) {
     const SemanticSymbolTable symbols = collectSymbols(phrases);
+    validateTypeUnionMembers(symbols);
     validateSemantics(phrases, symbols);
 
     SemanticProgram program{};
     for (const auto& phrase : phrases) {
-        lowerTopLevelPhrase(phrase, program);
+        lowerTopLevelPhrase(phrase, program, symbols);
     }
 
     return program;
@@ -1458,5 +1701,6 @@ SemanticProgram buildSemanticProgram(const ParsedPhrases& phrases) {
 
 void analyzeParsedPhrases(const ParsedPhrases& phrases) {
     const SemanticSymbolTable symbols = collectSymbols(phrases);
+    validateTypeUnionMembers(symbols);
     validateSemantics(phrases, symbols);
 }

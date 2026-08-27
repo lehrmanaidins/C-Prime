@@ -11,8 +11,10 @@ int32
 int64
 
 // Floating-point types
+float16
 float32
 float64
+float128
 
 // Character types
 char8

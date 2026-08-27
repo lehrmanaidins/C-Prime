@@ -1,0 +1,11 @@
+template <type T : Integer, type U : Floating>
+function select_first(T first, U second) -> T {
+    return first;
+}
+
+function main() {
+    primitive uint32 input = 42;
+    primitive float32 decimal = 1.5;
+    primitive uint32 value = select_first(input, decimal);
+    println(value);
+}

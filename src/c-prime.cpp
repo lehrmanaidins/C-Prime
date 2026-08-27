@@ -83,6 +83,7 @@ static ParsedPhrases parseCPrimeFileWithImports(const std::string& filename, boo
 
 static int runCompiler(const CliOptions& options) {
     const std::string& filename = options.filename;
+    const std::string prelude_filename = "src/runtime/c-prime.cprime";
     std::cout << "C-Prime Compiler\n";
 
     if (!fileExists(filename)) {
@@ -91,7 +92,10 @@ static int runCompiler(const CliOptions& options) {
     }
 
     try {
-        ParsedPhrases parsed_phrases = parseCPrimeFileWithImports(filename, options.debug);
+        std::unordered_set<std::string> importing{};
+        ParsedPhrases parsed_phrases = parseCPrimeFileWithImports(prelude_filename, options.debug, importing);
+        ParsedPhrases source_phrases = parseCPrimeFileWithImports(filename, options.debug, importing);
+        parsed_phrases.insert(parsed_phrases.end(), source_phrases.begin(), source_phrases.end());
         if (options.debug) {
             printParsedPhrases(parsed_phrases);
         }

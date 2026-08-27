@@ -1,0 +1,9 @@
+template <type T : Integral>
+function identity(T value) -> T {
+    return value;
+}
+
+function main() {
+    primitive float32 value = 1.5;
+    identity(value);
+}

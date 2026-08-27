@@ -1,0 +1,5 @@
+union UnsignedInteger : uint8 | uint16 | uint32 | uint64;
+union SignedInteger : int8 | int16 | int32 | int64;
+union Integer : UnsignedInteger | SignedInteger;
+union Floating : float32 | float64;
+union Number : Integer | Floating;

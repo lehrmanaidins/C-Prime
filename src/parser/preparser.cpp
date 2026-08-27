@@ -18,6 +18,7 @@ static bool phraseIntroducesScope(const std::vector<std::shared_ptr<Token>>& tok
 
     if (tokens[0] && (
         tokens[0]->value == "function"
+        || tokens[0]->value == "template"
         || tokens[0]->value == "struct"
         || tokens[0]->value == "enum"
         || tokens[0]->value == "if"

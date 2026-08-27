@@ -2,6 +2,8 @@
 
 #include <array>
 #include <cstdint>
+#include <stdfloat>
+#include <iostream>
 #include <tuple>
 #include <vector>
 
@@ -19,7 +21,7 @@ namespace cprime {
     using float32 = float;
     using float64 = double;
 
-    using char8 = char;
+    using char8 = char8_t;
     using char16 = char16_t;
     using char32 = char32_t;
 
@@ -31,4 +33,15 @@ namespace cprime {
 
     template <typename... Elements>
     using tuple = std::tuple<Elements...>;
+}
+
+template <typename... Args>
+void print(const Args&... args) {
+    (std::cout << ... << args);
+}
+
+template <typename... Args>
+void println(const Args&... args) {
+    (std::cout << ... << args);
+    std::cout << std::endl;
 }

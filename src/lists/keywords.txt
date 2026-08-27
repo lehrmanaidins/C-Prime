@@ -6,6 +6,7 @@ mutable
 primitive
 struct
 enum
+union
 
 // Reserved Data Types
 reference
@@ -14,6 +15,7 @@ list
 
 // Functions / Contracts
 function
+template
 return
 requires
 ensures

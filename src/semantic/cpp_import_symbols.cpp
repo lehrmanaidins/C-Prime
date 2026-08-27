@@ -126,28 +126,28 @@ static bool includesCPrimeRuntimeHeader(const std::vector<std::string>& lines) {
     return false;
 }
 
-static void registerCppImportSymbols(const std::string& path, SemanticSymbolTable& symbols) {
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return;
-    }
+static bool isCppVariadicTemplateLine(const std::string& line) {
+    static const std::regex template_regex(R"(^\s*template\s*<.*\.\.\..*>\s*$)");
+    return std::regex_search(line, template_regex);
+}
 
-    std::vector<std::string> lines{};
-    std::string line;
-    while (std::getline(file, line)) {
-        lines.push_back(line);
-    }
-
-    if (!includesCPrimeRuntimeHeader(lines)) {
-        throw std::runtime_error("Import error: C++ import '" + path + "' must include c-prime.hpp");
-    }
-
+static void scanCppSymbolLines(const std::vector<std::string>& lines, SemanticSymbolTable& symbols) {
     const std::regex type_regex(R"(^\s*(?:struct|class)\s+([A-Za-z_]\w*)\b|^\s*enum\s+(?:class\s+)?([A-Za-z_]\w*)\b|^\s*using\s+([A-Za-z_]\w*)\s*=|^\s*typedef\s+.*\s+([A-Za-z_]\w*)\s*;)");
     const std::regex function_regex(R"(^\s*(?:static\s+|inline\s+|constexpr\s+|const\s+)*([A-Za-z_][\w:<>\s,&*]*)\s+([A-Za-z_]\w*)\s*\(([^()]*)\)\s*(?:const\s*)?(?:\{|;))");
     const std::regex value_regex(R"(^\s*(?:static\s+|inline\s+|constexpr\s+|const\s+)*([A-Za-z_][\w:<>\s,&*]*)\s+([A-Za-z_]\w*)\s*(?:=|;))");
 
+    bool pending_variadic_template = false;
+
     for (std::string line : lines) {
         line = stripCppLineComment(line);
+
+        if (isCppVariadicTemplateLine(line)) {
+            pending_variadic_template = true;
+            continue;
+        }
+
+        const bool is_variadic_declaration = pending_variadic_template;
+        pending_variadic_template = false;
 
         std::smatch match;
         if (std::regex_search(line, match, type_regex)) {
@@ -164,9 +164,18 @@ static void registerCppImportSymbols(const std::string& path, SemanticSymbolTabl
             const CppImportTypeInfo return_type = normalizeCppImportType(match[1].str());
             const std::string function_name = match[2].str();
             const std::string parameters = match[3].str();
-            if (function_name != "if" && function_name != "for" && function_name != "while" && function_name != "switch"
-                && return_type.is_cprime_interface_type
-                && allCppImportParametersCPrimeCompatible(parameters)) {
+            if (function_name == "if" || function_name == "for" || function_name == "while" || function_name == "switch") {
+                continue;
+            }
+
+            if (is_variadic_declaration && parameters.find("...") != std::string::npos && return_type.is_cprime_interface_type) {
+                symbols.known_functions.insert(function_name);
+                symbols.function_return_types[function_name] = return_type.cprime_name;
+                symbols.variadic_functions.insert(function_name);
+                continue;
+            }
+
+            if (return_type.is_cprime_interface_type && allCppImportParametersCPrimeCompatible(parameters)) {
                 symbols.known_functions.insert(function_name);
                 symbols.function_return_types[function_name] = return_type.cprime_name;
                 symbols.function_parameter_counts[function_name] = countCppParameters(parameters);
@@ -182,4 +191,37 @@ static void registerCppImportSymbols(const std::string& path, SemanticSymbolTabl
             }
         }
     }
+}
+
+static std::vector<std::string> readAllLines(const std::string& path) {
+    std::ifstream file(path);
+    std::vector<std::string> lines{};
+    std::string line;
+    while (std::getline(file, line)) {
+        lines.push_back(line);
+    }
+    return lines;
+}
+
+static void registerCppImportSymbols(const std::string& path, SemanticSymbolTable& symbols) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return;
+    }
+    file.close();
+
+    const std::vector<std::string> lines = readAllLines(path);
+
+    if (!includesCPrimeRuntimeHeader(lines)) {
+        throw std::runtime_error("Import error: C++ import '" + path + "' must include c-prime.hpp");
+    }
+
+    scanCppSymbolLines(lines, symbols);
+}
+
+// Scans the always-included runtime header itself, so builtins like print/println
+// are ordinary functions provided by src/runtime/c-prime.hpp rather than compiler keywords.
+static void registerRuntimeSymbols(SemanticSymbolTable& symbols) {
+    const std::vector<std::string> lines = readAllLines("src/runtime/c-prime.hpp");
+    scanCppSymbolLines(lines, symbols);
 }
