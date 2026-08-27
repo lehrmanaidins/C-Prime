@@ -100,7 +100,7 @@ Terms loadTerms(const std::string& filename, bool emptyLineAsSpace = false) {
 
         line = line.substr(start);
 
-        if (line[0] == '/' || line[0] == '#') {
+        if (line[0] == '#' || line.rfind("//", 0) == 0) {
             continue;
         }
 

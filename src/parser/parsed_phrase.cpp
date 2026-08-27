@@ -17,7 +17,10 @@ enum class ParsedPhraseKind {
     Assignment,
     ParameterDefinition,
     EnumValueDefinition,
-    CallStatement
+    CallStatement,
+    ReturnStatement,
+    BreakStatement,
+    ContinueStatement
 };
 
 struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
@@ -65,6 +68,12 @@ struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
                 return "EnumValueDefinition";
             case ParsedPhraseKind::CallStatement:
                 return "CallStatement";
+            case ParsedPhraseKind::ReturnStatement:
+                return "ReturnStatement";
+            case ParsedPhraseKind::BreakStatement:
+                return "BreakStatement";
+            case ParsedPhraseKind::ContinueStatement:
+                return "ContinueStatement";
             case ParsedPhraseKind::Unknown:
             default:
                 return "Unknown";

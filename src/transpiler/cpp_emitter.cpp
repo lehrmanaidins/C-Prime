@@ -1,6 +1,7 @@
 #pragma once
 
 #include <set>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -193,6 +194,7 @@ static void emitStatementRef(
     const std::vector<SemanticStructDefinitionIR>& structs,
     const std::vector<SemanticEnumDefinitionIR>& enums,
     const std::vector<SemanticCallIR>& calls,
+    const std::vector<SemanticReturnIR>& returns,
     const std::vector<SemanticIfIR>& ifs,
     const std::vector<SemanticWhileIR>& whiles,
     const std::vector<SemanticForIR>& fors,
@@ -238,6 +240,67 @@ static std::string indent(size_t depth) {
     return std::string(depth * 4, ' ');
 }
 
+static std::string emitForClauseExpression(const SemanticExpressionIR& expression, CppEmitContext& context) {
+    if (expression.kind != SemanticExpressionKind::Raw) {
+        return emitExpression(expression, context);
+    }
+
+    const std::string text = trim(expression.text);
+    for (const std::string op : {"+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "~=", "<<=", ">>="}) {
+        if (text.find(op) != std::string::npos) {
+            return text;
+        }
+    }
+
+    for (const std::string op : {"+", "-", "*", "/", "%", "&", "|", "^", "~", "<<", ">>"}) {
+        const std::string split_assignment = " " + op + " = ";
+        const size_t split_pos = text.find(split_assignment);
+        if (split_pos != std::string::npos) {
+            return trim(text.substr(0, split_pos)) + " " + op + "= " + trim(text.substr(split_pos + split_assignment.size()));
+        }
+    }
+
+    const size_t equal_pos = text.find('=');
+    if (equal_pos == std::string::npos) {
+        return emitExpression(expression, context);
+    }
+
+    std::string lhs = trim(text.substr(0, equal_pos));
+    const std::string rhs = trim(text.substr(equal_pos + 1));
+    bool is_mutable = false;
+
+    if (lhs.rfind("mutable ", 0) == 0) {
+        is_mutable = true;
+        lhs = trim(lhs.substr(8));
+    } else if (lhs.rfind("const ", 0) == 0) {
+        lhs = trim(lhs.substr(6));
+    }
+
+    std::istringstream lhs_stream(lhs);
+    std::vector<std::string> parts{};
+    std::string part;
+    while (lhs_stream >> part) {
+        parts.push_back(part);
+    }
+
+    if (parts.size() < 2) {
+        return emitExpression(expression, context);
+    }
+
+    const std::string name = parts.back();
+    std::string type_name;
+    for (size_t i = 0; i + 1 < parts.size(); ++i) {
+        if (!type_name.empty()) {
+            type_name += " ";
+        }
+        type_name += parts[i];
+    }
+
+    const SemanticExpressionIR initializer = parseExpressionIR(rhs, expression.location);
+    const std::string qualifier = is_mutable ? "" : "const ";
+    return qualifier + emitTypeRef(parseTypeRef(type_name), context) + " " + sanitizeIdentifier(name) + " = " + emitExpression(initializer, context);
+}
+
 static void emitStatementList(
     std::string& output,
     CppEmitContext& context,
@@ -248,13 +311,14 @@ static void emitStatementList(
     const std::vector<SemanticStructDefinitionIR>& structs,
     const std::vector<SemanticEnumDefinitionIR>& enums,
     const std::vector<SemanticCallIR>& calls,
+    const std::vector<SemanticReturnIR>& returns,
     const std::vector<SemanticIfIR>& ifs,
     const std::vector<SemanticWhileIR>& whiles,
     const std::vector<SemanticForIR>& fors,
     size_t indent_depth
 ) {
     for (const auto& ref : order) {
-        emitStatementRef(output, context, ref, vars, assigns, types, structs, enums, calls, ifs, whiles, fors, indent_depth);
+        emitStatementRef(output, context, ref, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, indent_depth);
     }
 }
 
@@ -268,6 +332,7 @@ static void emitStatementRef(
     const std::vector<SemanticStructDefinitionIR>& structs,
     const std::vector<SemanticEnumDefinitionIR>& enums,
     const std::vector<SemanticCallIR>& calls,
+    const std::vector<SemanticReturnIR>& returns,
     const std::vector<SemanticIfIR>& ifs,
     const std::vector<SemanticWhileIR>& whiles,
     const std::vector<SemanticForIR>& fors,
@@ -286,7 +351,7 @@ static void emitStatementRef(
         case SemanticStatementKind::Assignment: {
             const auto& asg = assigns[ref.index];
             context.pushLine(asg.location, "assignment");
-            appendLine(output, context, i + sanitizeIdentifier(asg.target) + " = " + emitExpression(asg.expression, context) + ";");
+            appendLine(output, context, i + sanitizeIdentifier(asg.target) + " " + asg.operator_symbol + " " + emitExpression(asg.expression, context) + ";");
             break;
         }
         case SemanticStatementKind::TypeDefinition: {
@@ -321,22 +386,48 @@ static void emitStatementRef(
         case SemanticStatementKind::Call: {
             const auto& call = calls[ref.index];
             context.pushLine(call.location, "call");
-            context.required_headers.insert("<iostream>");
-            std::string rendered = "std::cout";
-            for (const auto& arg : call.arguments) {
-                rendered += " << " + emitExpression(arg, context);
+            if (call.name == "print" || call.name == "println") {
+                context.required_headers.insert("<iostream>");
+                std::string rendered = "std::cout";
+                for (const auto& arg : call.arguments) {
+                    rendered += " << " + emitExpression(arg, context);
+                }
+                if (call.name == "println") {
+                    rendered += " << std::endl";
+                }
+                appendLine(output, context, i + rendered + ";");
+            } else {
+                std::string rendered = sanitizeIdentifier(call.name) + "(";
+                for (size_t idx = 0; idx < call.arguments.size(); ++idx) {
+                    if (idx > 0) rendered += ", ";
+                    rendered += emitExpression(call.arguments[idx], context);
+                }
+                rendered += ");";
+                appendLine(output, context, i + rendered);
             }
-            if (call.name == "println") {
-                rendered += " << std::endl";
-            }
-            appendLine(output, context, i + rendered + ";");
             break;
         }
+        case SemanticStatementKind::Return: {
+            const auto& ret = returns[ref.index];
+            context.pushLine(ret.location, "return");
+            if (ret.expression.text.empty()) {
+                appendLine(output, context, i + "return;");
+            } else {
+                appendLine(output, context, i + "return " + emitExpression(ret.expression, context) + ";");
+            }
+            break;
+        }
+        case SemanticStatementKind::Break:
+            appendLine(output, context, i + "break;");
+            break;
+        case SemanticStatementKind::Continue:
+            appendLine(output, context, i + "continue;");
+            break;
         case SemanticStatementKind::If: {
             const auto& node = ifs[ref.index];
             context.pushLine(node.location, "if");
             appendLine(output, context, i + "if (" + emitExpression(node.condition, context) + ") {");
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, ifs, whiles, fors, indent_depth + 1);
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
@@ -344,15 +435,15 @@ static void emitStatementRef(
             const auto& node = whiles[ref.index];
             context.pushLine(node.location, "while");
             appendLine(output, context, i + "while (" + emitExpression(node.condition, context) + ") {");
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, ifs, whiles, fors, indent_depth + 1);
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
         case SemanticStatementKind::For: {
             const auto& node = fors[ref.index];
             context.pushLine(node.location, "for");
-            appendLine(output, context, i + "for (" + emitExpression(node.initializer, context) + "; " + emitExpression(node.condition, context) + "; " + emitExpression(node.update, context) + ") {");
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, ifs, whiles, fors, indent_depth + 1);
+            appendLine(output, context, i + "for (" + emitForClauseExpression(node.initializer, context) + "; " + emitForClauseExpression(node.condition, context) + "; " + emitForClauseExpression(node.update, context) + ") {");
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
@@ -362,6 +453,7 @@ static void emitStatementRef(
 CppEmitResult emitCpp(const SemanticProgram& program) {
     CppEmitResult result{};
     CppEmitContext context{};
+    const std::vector<SemanticReturnIR> no_top_level_returns{};
 
     std::string body;
 
@@ -376,6 +468,7 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
             program.struct_definitions,
             program.enum_definitions,
             program.calls,
+            no_top_level_returns,
             program.if_statements,
             program.while_statements,
             program.for_statements,
@@ -406,6 +499,7 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
             function.struct_definitions,
             function.enum_definitions,
             function.calls,
+            function.returns,
             function.if_statements,
             function.while_statements,
             function.for_statements,

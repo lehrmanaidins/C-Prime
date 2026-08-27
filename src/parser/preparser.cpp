@@ -36,6 +36,7 @@ Phrases preparseTokens(const Tokens& tokens) {
     std::vector<std::shared_ptr<Phrase>> scope_stack{};
     std::vector<std::shared_ptr<Token>> current_tokens{};
     int expression_brace_depth = 0;
+    int paren_depth = 0;
 
     auto flushCurrent = [&]() {
         if (current_tokens.empty()) {
@@ -60,6 +61,20 @@ Phrases preparseTokens(const Tokens& tokens) {
         }
 
         const std::string value = token->value;
+
+        if (value == "(") {
+            ++paren_depth;
+            current_tokens.push_back(token);
+            continue;
+        }
+
+        if (value == ")") {
+            if (paren_depth > 0) {
+                --paren_depth;
+            }
+            current_tokens.push_back(token);
+            continue;
+        }
 
         if (value == "{") {
             if (!current_tokens.empty() && phraseIntroducesScope(current_tokens)) {
@@ -96,7 +111,7 @@ Phrases preparseTokens(const Tokens& tokens) {
         }
 
         if (value == ";") {
-            if (expression_brace_depth > 0) {
+            if (expression_brace_depth > 0 || paren_depth > 0) {
                 current_tokens.push_back(token);
                 continue;
             }

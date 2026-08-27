@@ -8,12 +8,15 @@ struct ParsedAssignment : ParsedPhrase {
     ParsedAssignment(
         const std::string& left,
         const std::string& right,
+        const std::string& operator_symbol = "=",
         const std::shared_ptr<Phrase>& source_phrase = nullptr
     ) : ParsedPhrase(ParsedPhraseKind::Assignment, source_phrase),
         left(left),
-        right(right) {
+        right(right),
+        operator_symbol(operator_symbol) {
     }
 
     std::string left;
     std::string right;
+    std::string operator_symbol;
 };

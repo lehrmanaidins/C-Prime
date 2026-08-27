@@ -12,6 +12,7 @@
 #include "phrases/function.cpp"
 #include "phrases/parameter_declaration.cpp"
 #include "phrases/parameter_definition.cpp"
+#include "phrases/return_statement.cpp"
 #include "phrases/statement.cpp"
 #include "phrases/struct_definition.cpp"
 #include "phrases/type_definition.cpp"
@@ -99,6 +100,7 @@ static bool hasTokenValue(const Tokens& tokens, const std::string& value) {
 
 static bool isDeclarationStarter(const std::string& value) {
     return value == "mutable"
+        || value == "const"
         || value == "primitive"
         || value == "type"
         || value == "struct"
@@ -165,6 +167,10 @@ static void validatePhrase(const std::shared_ptr<Phrase>& phrase, ParsedPhraseKi
         return;
     }
 
+    if (!phrase->tokens.empty() && phrase->tokens[0] && phrase->tokens[0]->value == "function") {
+        return;
+    }
+
     const std::string semicolon_break = findMissingSemicolonBeforeToken(phrase->tokens);
     if (!semicolon_break.empty()) {
         throw std::runtime_error(
@@ -181,6 +187,22 @@ static size_t findTokenIndex(const Tokens& tokens, const std::string& value) {
             return i;
         }
     }
+    return tokens.size();
+}
+
+static bool isAssignmentOperator(const std::string& value) {
+    return value == "=" || value == "+=" || value == "-=" || value == "*=" || value == "/="
+        || value == "%=" || value == "**=" || value == "&=" || value == "|=" || value == "^="
+        || value == "~=" || value == "<<=" || value == ">>=";
+}
+
+static size_t findAssignmentOperatorIndex(const Tokens& tokens) {
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        if (tokens[i] && isAssignmentOperator(tokens[i]->value)) {
+            return i;
+        }
+    }
+
     return tokens.size();
 }
 
@@ -213,7 +235,7 @@ static bool isVariableDeclarationPhrase(const std::shared_ptr<Phrase>& phrase) {
         return false;
     }
 
-    if (phrase->tokens[0] && (phrase->tokens[0]->value == "type" || phrase->tokens[0]->value == "function")) {
+    if (phrase->tokens[0] && (phrase->tokens[0]->value == "type" || phrase->tokens[0]->value == "function" || phrase->tokens[0]->value == "return")) {
         return false;
     }
 
@@ -221,11 +243,15 @@ static bool isVariableDeclarationPhrase(const std::shared_ptr<Phrase>& phrase) {
         return false;
     }
 
+    if (phrase->tokens[0] && (phrase->tokens[0]->value == "if" || phrase->tokens[0]->value == "else" || phrase->tokens[0]->value == "while" || phrase->tokens[0]->value == "for")) {
+        return false;
+    }
+
     if (hasTokenValue(phrase->tokens, ":")) {
         return false;
     }
 
-    const size_t equal_index = findTokenIndex(phrase->tokens, "=");
+    const size_t equal_index = findAssignmentOperatorIndex(phrase->tokens);
     if (equal_index != phrase->tokens.size()) {
         return equal_index >= 2;
     }
@@ -243,12 +269,24 @@ static bool isVariableDeclarationPhrase(const std::shared_ptr<Phrase>& phrase) {
     return true;
 }
 
+static bool isReturnPhrase(const std::shared_ptr<Phrase>& phrase) {
+    return phrase && !phrase->tokens.empty() && phrase->tokens[0] && phrase->tokens[0]->value == "return";
+}
+
+static bool isBreakPhrase(const std::shared_ptr<Phrase>& phrase) {
+    return phrase && phrase->tokens.size() == 1 && phrase->tokens[0] && phrase->tokens[0]->value == "break";
+}
+
+static bool isContinuePhrase(const std::shared_ptr<Phrase>& phrase) {
+    return phrase && phrase->tokens.size() == 1 && phrase->tokens[0] && phrase->tokens[0]->value == "continue";
+}
+
 static bool isAssignmentPhrase(const std::shared_ptr<Phrase>& phrase) {
     if (!phrase || phrase->tokens.size() < 3) {
         return false;
     }
 
-    const size_t equal_index = findTokenIndex(phrase->tokens, "=");
+    const size_t equal_index = findAssignmentOperatorIndex(phrase->tokens);
     if (equal_index == phrase->tokens.size() || equal_index == 0) {
         return false;
     }
@@ -308,6 +346,24 @@ static bool isBuiltinCallPhrase(const std::shared_ptr<Phrase>& phrase) {
     }
 
     return close_paren != phrase->tokens.size() && close_paren == phrase->tokens.size() - 1;
+}
+
+static bool isCallPhrase(const std::shared_ptr<Phrase>& phrase) {
+    if (!phrase || phrase->tokens.size() < 3 || !phrase->tokens[0]) {
+        return false;
+    }
+
+    if (phrase->tokens[0]->type != TokenCatagory::Identifier) {
+        return false;
+    }
+
+    size_t open_paren = phrase->tokens.size();
+    size_t close_paren = phrase->tokens.size();
+    if (!findParentheses(phrase->tokens, open_paren, close_paren)) {
+        return false;
+    }
+
+    return open_paren == 1 && close_paren == phrase->tokens.size() - 1;
 }
 
 static std::vector<std::string> parseCallArguments(const Tokens& tokens, size_t open_paren, size_t close_paren) {
@@ -429,6 +485,10 @@ static void parseFunctionParameters(
             return;
         }
 
+        if (last == segment_start + 1 && tokens[segment_start] && tokens[segment_start]->value == "void") {
+            return;
+        }
+
         std::string param_name = tokens[last - 1] ? tokens[last - 1]->value : "";
         std::string type_name = joinTokenRange(tokens, segment_start, last - 1);
 
@@ -449,6 +509,14 @@ static void parseFunctionParameters(
     }
 
     flush_segment(close_paren);
+}
+
+static std::string parseFunctionReturnType(const Tokens& tokens, size_t close_paren) {
+    if (close_paren + 1 >= tokens.size() || !tokens[close_paren + 1] || tokens[close_paren + 1]->value != "->") {
+        return "";
+    }
+
+    return joinTokenRange(tokens, close_paren + 2, tokens.size());
 }
 
 std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase, ParsedPhraseKind parent_kind = ParsedPhraseKind::Unknown) {
@@ -472,7 +540,7 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
         parsed_phrase = std::make_shared<ParsedEnumValueDefinition>(parseEnumValues(phrase->tokens), phrase);
     } else if (isFunctionPhrase(phrase, open_paren, close_paren) && open_paren > 1 && phrase->tokens[open_paren - 1]) {
         const std::string function_name = phrase->tokens[open_paren - 1]->value;
-        const std::string return_type = joinTokenRange(phrase->tokens, 1, open_paren - 1);
+        const std::string return_type = parseFunctionReturnType(phrase->tokens, close_paren);
         auto function = std::make_shared<ParsedFunction>(function_name, return_type, phrase);
         parseFunctionParameters(phrase->tokens, open_paren, close_paren, phrase, function);
         parsed_phrase = function;
@@ -488,25 +556,32 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
         const std::string enum_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
         parsed_phrase = std::make_shared<ParsedEnumDefinition>(enum_name, phrase);
     } else if (isVariableDeclarationPhrase(phrase)) {
-        const size_t equal_index = findTokenIndex(phrase->tokens, "=");
+        const size_t equal_index = findAssignmentOperatorIndex(phrase->tokens);
         const bool is_mutable = phrase->tokens[0] && phrase->tokens[0]->value == "mutable";
         const bool has_initializer = equal_index != phrase->tokens.size();
         const size_t name_index = has_initializer
             ? (equal_index > 0 ? equal_index - 1 : 0)
             : (phrase->tokens.size() - 1);
         const std::string name = phrase->tokens[name_index] ? phrase->tokens[name_index]->value : "";
-        const size_t type_begin = is_mutable ? 1 : 0;
+        const size_t type_begin = (is_mutable || (phrase->tokens[0] && phrase->tokens[0]->value == "const")) ? 1 : 0;
         const std::string type_name = joinTokenRange(phrase->tokens, type_begin, name_index);
         const std::string initializer = has_initializer
             ? joinTokenRange(phrase->tokens, equal_index + 1, phrase->tokens.size())
             : "";
         parsed_phrase = std::make_shared<ParsedVariableDeclaration>(type_name, name, initializer, is_mutable, phrase);
+    } else if (isReturnPhrase(phrase)) {
+        parsed_phrase = std::make_shared<ParsedReturnStatement>(joinTokenRange(phrase->tokens, 1, phrase->tokens.size()), phrase);
+    } else if (isBreakPhrase(phrase)) {
+        parsed_phrase = std::make_shared<ParsedBreakStatement>(phrase);
+    } else if (isContinuePhrase(phrase)) {
+        parsed_phrase = std::make_shared<ParsedContinueStatement>(phrase);
     } else if (isAssignmentPhrase(phrase)) {
-        const size_t equal_index = findTokenIndex(phrase->tokens, "=");
+        const size_t equal_index = findAssignmentOperatorIndex(phrase->tokens);
         const std::string left = joinTokenRange(phrase->tokens, 0, equal_index);
         const std::string right = joinTokenRange(phrase->tokens, equal_index + 1, phrase->tokens.size());
-        parsed_phrase = std::make_shared<ParsedAssignment>(left, right, phrase);
-    } else if (isBuiltinCallPhrase(phrase)) {
+        const std::string operator_symbol = phrase->tokens[equal_index] ? phrase->tokens[equal_index]->value : "=";
+        parsed_phrase = std::make_shared<ParsedAssignment>(left, right, operator_symbol, phrase);
+    } else if (isBuiltinCallPhrase(phrase) || isCallPhrase(phrase)) {
         size_t open_paren = phrase->tokens.size();
         size_t close_paren = phrase->tokens.size();
 

@@ -14,3 +14,17 @@ struct ParsedUnknownPhrase : ParsedPhrase {
 
     std::string text;
 };
+
+struct ParsedBreakStatement : ParsedPhrase {
+    explicit ParsedBreakStatement(
+        const std::shared_ptr<Phrase>& source_phrase = nullptr
+    ) : ParsedPhrase(ParsedPhraseKind::BreakStatement, source_phrase) {
+    }
+};
+
+struct ParsedContinueStatement : ParsedPhrase {
+    explicit ParsedContinueStatement(
+        const std::shared_ptr<Phrase>& source_phrase = nullptr
+    ) : ParsedPhrase(ParsedPhraseKind::ContinueStatement, source_phrase) {
+    }
+};

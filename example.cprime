@@ -1,65 +1,105 @@
 
+// C-Prime implemented feature showcase.
+
+type Distance : primitive uint32;
+type DistancePair : (Distance, Distance);
+type DistanceList : Distance[];
+
+struct Telemetry {
+    Distance altitude;
+    Distance velocity;
+    primitive bool healthy;
+};
+
+enum SystemState {
+    STARTING,
+    RUNNING,
+    STOPPED
+};
+
+function next_distance(Distance value) -> Distance {
+    return value + 1;
+}
+
+function add_u32(primitive uint32 left, primitive uint32 right) -> primitive uint32 {
+    return left + right;
+}
+
+function print_distance(Distance value) {
+    print("distance = ");
+    println(value);
+}
+
 function main() {
-	
-	// Single Line Commnt Example
-	
-	/*
-	    Multiline Comment Example
-	 */
-	
-	// Immutable Unsignd Integer Variables
-    primitive uint8 a = 1;
-    primitive uint16 b = 2;
-    primitive uint32 c = 3;
-    primitive uint32 d = 4;
-	
-	// Mutable Unsignd Integer Variables
-    mutable primitive uint8 e = 1;
-    mutable primitive uint16 f = 2;
-    mutable primitive uint32 g = 3;
-    mutable primitive uint32 h = 4;
-	
-	// Immutable Character Types
-    primitive char8 i = 'a';
-    primitive char16 j = 'b';
-    primitive char32 k = 'c';
-	
-	// Mutable Chacter Types
-    mutable primitive char8 l = 'a';
-    mutable primitive char16 m = 'b';
-    mutable primitive char32 n = 'c';
-	
-	// Immutable and Mutable Boolean
-    primitive bool o = false;
-    mutable primitive bool p = true;
-	
-    primitive uint8[3] q = {1, 2, 3}; // Array
-    (primitive uint8, primitive float32) r = (1, 2.0); // Tuple
+    // Comments, primitive declarations, literals, const-by-default, and explicit const.
+    const primitive uint8 explicit_constant = 1;
+    primitive uint8 unsigned8 = 1;
+    primitive uint16 unsigned16 = 2;
+    primitive uint32 unsigned32 = 3;
+    primitive uint64 unsigned64 = 4;
+    primitive int8 signed8 = 5;
+    primitive int16 signed16 = 6;
+    primitive int32 signed32 = 7;
+    primitive int64 signed64 = 8;
+    primitive float32 decimal32 = 1.5;
+    primitive float64 decimal64 = 2.5;
+    primitive char8 character8 = 'a';
+    primitive char16 character16 = 'b';
+    primitive char32 character32 = 'c';
+    primitive bool enabled = true;
 
-    type ExampleType : primitive uint8; // Primitive Domain Type Definition
-    type ExampleTuple : (ExampleType, ExampleType); // Tuple Type Definition
-    type ExampleArray : ExampleType[]; // Array Type Definition
+    /* Mutable variables and assignment operators. */
+    mutable primitive uint32 counter = 0;
+    counter = counter + 1;
+    counter += 2;
+    counter -= 1;
+    counter *= 3;
+    counter /= 2;
+    counter %= 5;
 
-    ExampleType s = 1.0; // Using Primitive Domain Type
-    ExampleTuple t = (1, 2); // Using Tuple Domain Type
-    ExampleArray[3] u = {1, 2, 3}; // Using Array Domain Type
+    // Arrays, dynamic array aliases, tuples, and domain type initialization.
+    primitive uint8[3] fixed_numbers = {1, 2, 3};
+    primitive uint8[] dynamic_numbers = {4, 5, 6};
+    (primitive uint8, primitive float32) primitive_pair = (1, 2.0);
+    Distance altitude = 1000;
+    Distance velocity = next_distance(altitude);
+    DistancePair limits = (10, 20);
+    DistanceList[3] checkpoints = {100, 200, 300};
 
-    struct ExampleStruct {
-        ExampleType value1;
-        ExampleType value2;
+    // Structs, struct initializer lists, enums, and enum values.
+    Telemetry telemetry = {
+        altitude = 1000,
+        velocity = 42,
+        healthy = true
     };
+    SystemState state = SystemState::RUNNING;
 
-    ExampleStruct example_struct = {
-        value1 = 1,
-        value2 = 2
-    };
+    // Expressions and function calls.
+    primitive uint32 total = add_u32(unsigned32, counter);
+    primitive bool has_distance = altitude > 0;
+    primitive bool should_print = has_distance && enabled;
 
-    enum ExampleEnum {
-        EXAMPLE1,
-        EXAMPLE2,
-        EXAMPLE3
-    };
+    // Builtin output preserves string literals, including punctuation like C-Prime.
+    print("Hello, ");
+    println("from C-Prime!");
+    print_distance(velocity);
 
-    print("Hello, World!");
-    println("Hello, World!");
+    if (should_print) {
+        println(total);
+    }
+
+    while (counter < 4) {
+        counter += 1;
+        if (counter == 2) {
+            continue;
+        }
+        println(counter);
+        if (counter == 3) {
+            break;
+        }
+    }
+
+    for (mutable primitive uint32 index = 0; index < 3; index += 1) {
+        println(index);
+    }
 }

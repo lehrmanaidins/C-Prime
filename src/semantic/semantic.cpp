@@ -17,6 +17,7 @@
 #include "../parser/phrases/function.cpp"
 #include "../parser/phrases/parameter_declaration.cpp"
 #include "../parser/phrases/parameter_definition.cpp"
+#include "../parser/phrases/return_statement.cpp"
 #include "../parser/phrases/statement.cpp"
 #include "../parser/phrases/struct_definition.cpp"
 #include "../parser/phrases/type_definition.cpp"
@@ -73,6 +74,7 @@ struct SemanticVariableDeclarationIR {
 
 struct SemanticAssignmentIR {
     std::string target;
+    std::string operator_symbol;
     SemanticExpressionIR expression;
     SourceLocation location;
 };
@@ -107,6 +109,11 @@ struct SemanticCallIR {
     SourceLocation location;
 };
 
+struct SemanticReturnIR {
+    SemanticExpressionIR expression;
+    SourceLocation location;
+};
+
 struct SemanticIfIR;
 struct SemanticWhileIR;
 struct SemanticForIR;
@@ -120,7 +127,10 @@ enum class SemanticStatementKind {
     If,
     While,
     For,
-    Call
+    Call,
+    Return,
+    Break,
+    Continue
 };
 
 struct SemanticStatementRef {
@@ -159,6 +169,7 @@ struct SemanticFunctionIR {
     std::vector<SemanticStructDefinitionIR> struct_definitions;
     std::vector<SemanticEnumDefinitionIR> enum_definitions;
     std::vector<SemanticCallIR> calls;
+    std::vector<SemanticReturnIR> returns;
     std::vector<SemanticIfIR> if_statements;
     std::vector<SemanticWhileIR> while_statements;
     std::vector<SemanticForIR> for_statements;
@@ -201,11 +212,13 @@ struct VariableSymbol {
 struct SemanticSymbolTable {
     std::unordered_map<std::string, TypeSymbol> known_types;
     std::unordered_set<std::string> known_functions;
+    std::unordered_map<std::string, std::string> function_return_types;
 };
 
 struct ValidationContext {
     const SemanticSymbolTable& symbols;
     std::vector<std::unordered_map<std::string, VariableSymbol>> variable_scopes;
+    std::string current_function_return_type;
 };
 
 static std::string trim(const std::string& text) {
@@ -440,6 +453,18 @@ static SemanticExpressionIR parseExpressionIR(const std::string& raw_expression,
         return expr;
     }
 
+    for (const std::string op : {"+=", "-=", "*=", "/=", "%=", "**=", "&=", "|=", "^=", "~=", "<<=", ">>="}) {
+        if (expression.find(op) != std::string::npos) {
+            expr.kind = SemanticExpressionKind::Raw;
+            return expr;
+        }
+    }
+
+    if (inferLiteralTypeName(expression).has_value()) {
+        expr.kind = SemanticExpressionKind::Literal;
+        return expr;
+    }
+
     if (expression.front() == '{' && expression.back() == '}') {
         expr.kind = SemanticExpressionKind::InitializerList;
         const std::string inner = trim(expression.substr(1, expression.size() - 2));
@@ -479,11 +504,6 @@ static SemanticExpressionIR parseExpressionIR(const std::string& raw_expression,
                 expr.children.push_back(parseExpressionIR(part, location));
             }
         }
-        return expr;
-    }
-
-    if (inferLiteralTypeName(expression).has_value()) {
-        expr.kind = SemanticExpressionKind::Literal;
         return expr;
     }
 
@@ -604,6 +624,7 @@ static void collectSymbolsFromFunction(const std::shared_ptr<ParsedFunction>& fu
     }
 
     symbols.known_functions.insert(function_phrase->name);
+    symbols.function_return_types[function_phrase->name] = normalizeTypeName(function_phrase->return_type.empty() ? "void" : function_phrase->return_type);
 
     for (const auto& nested : function_phrase->nested_phrases) {
         collectSymbolsFromPhrase(nested, symbols);
@@ -688,8 +709,17 @@ static std::optional<std::string> inferExpressionTypeName(
         case SemanticExpressionKind::InitializerList:
             return std::optional<std::string>{"init_list"};
         case SemanticExpressionKind::Call:
+            if (context.symbols.function_return_types.find(expression.operator_symbol) != context.symbols.function_return_types.end()) {
+                return std::optional<std::string>{context.symbols.function_return_types.at(expression.operator_symbol)};
+            }
             return std::nullopt;
         case SemanticExpressionKind::Binary:
+            if (expression.operator_symbol == "==" || expression.operator_symbol == "!="
+                || expression.operator_symbol == ">=" || expression.operator_symbol == "<="
+                || expression.operator_symbol == ">" || expression.operator_symbol == "<"
+                || expression.operator_symbol == "&&" || expression.operator_symbol == "||") {
+                return std::optional<std::string>{"bool"};
+            }
             if (!expression.children.empty()) {
                 return inferExpressionTypeName(expression.children.front(), context);
             }
@@ -818,6 +848,8 @@ static void analyzeFunction(
         throw semanticError(function_phrase, "unknown function return type '" + function_phrase->return_type + "' in phrase: " + joinPhraseText(function_phrase));
     }
 
+    const std::string previous_return_type = context.current_function_return_type;
+    context.current_function_return_type = return_type;
     enterScope(context);
 
     for (const auto& nested : function_phrase->nested_phrases) {
@@ -825,6 +857,7 @@ static void analyzeFunction(
     }
 
     leaveScope(context);
+    context.current_function_return_type = previous_return_type;
 }
 
 static void analyzeVariableDeclaration(
@@ -991,15 +1024,39 @@ static void analyzeCallStatement(
         return;
     }
 
-    if (call_phrase->name != "print" && call_phrase->name != "println") {
-        throw semanticError(call_phrase, "unknown builtin function '" + call_phrase->name + "'");
+    if (context.symbols.known_functions.find(call_phrase->name) == context.symbols.known_functions.end()) {
+        throw semanticError(call_phrase, "unknown function '" + call_phrase->name + "'");
     }
 
     for (const auto& argument : call_phrase->arguments) {
         (void)parseExpressionIR(argument, phraseStartLocation(call_phrase));
     }
+}
 
-    (void)context;
+static void analyzeReturnStatement(
+    const std::shared_ptr<ParsedReturnStatement>& return_phrase,
+    ValidationContext& context
+) {
+    if (!return_phrase) {
+        return;
+    }
+
+    const std::string expected_type = normalizeTypeName(context.current_function_return_type.empty() ? "void" : context.current_function_return_type);
+    const std::string returned_expression = trim(return_phrase->expression);
+
+    if (expected_type == "void") {
+        if (!returned_expression.empty()) {
+            throw semanticError(return_phrase, "void function cannot return a value");
+        }
+        return;
+    }
+
+    if (returned_expression.empty()) {
+        throw semanticError(return_phrase, "non-void function must return a value");
+    }
+
+    SemanticExpressionIR expression = parseExpressionIR(returned_expression, phraseStartLocation(return_phrase));
+    validateAssignmentCompatibility(return_phrase, expected_type, expression, context);
 }
 
 static void analyzeUnknown(
@@ -1044,6 +1101,12 @@ static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, Validatio
         case ParsedPhraseKind::CallStatement:
             analyzeCallStatement(std::dynamic_pointer_cast<ParsedCallStatement>(phrase), context);
             break;
+        case ParsedPhraseKind::ReturnStatement:
+            analyzeReturnStatement(std::dynamic_pointer_cast<ParsedReturnStatement>(phrase), context);
+            break;
+        case ParsedPhraseKind::BreakStatement:
+        case ParsedPhraseKind::ContinueStatement:
+            break;
         case ParsedPhraseKind::Unknown:
             analyzeUnknown(phrase, context);
             break;
@@ -1069,6 +1132,8 @@ static SemanticSymbolTable collectSymbols(const ParsedPhrases& phrases) {
 
     symbols.known_functions.insert("print");
     symbols.known_functions.insert("println");
+    symbols.function_return_types["print"] = "void";
+    symbols.function_return_types["println"] = "void";
 
     for (const auto& phrase : phrases) {
         collectSymbolsFromPhrase(phrase, symbols);
@@ -1101,6 +1166,7 @@ static SemanticVariableDeclarationIR lowerVariableDeclaration(const std::shared_
 static SemanticAssignmentIR lowerAssignment(const std::shared_ptr<ParsedAssignment>& phrase) {
     SemanticAssignmentIR node{};
     node.target = trim(phrase->left);
+    node.operator_symbol = phrase->operator_symbol;
     node.expression = parseExpressionIR(phrase->right, phraseStartLocation(phrase));
     node.location = phraseStartLocation(phrase);
     return node;
@@ -1173,6 +1239,7 @@ static void lowerBodyPhrases(
     std::vector<SemanticStructDefinitionIR>& struct_definitions,
     std::vector<SemanticEnumDefinitionIR>& enum_definitions,
     std::vector<SemanticCallIR>& calls,
+    std::vector<SemanticReturnIR>& returns,
     std::vector<SemanticIfIR>& if_statements,
     std::vector<SemanticWhileIR>& while_statements,
     std::vector<SemanticForIR>& for_statements,
@@ -1187,6 +1254,7 @@ static void lowerBodyPhrases(
     std::vector<SemanticStructDefinitionIR>& struct_definitions,
     std::vector<SemanticEnumDefinitionIR>& enum_definitions,
     std::vector<SemanticCallIR>& calls,
+    std::vector<SemanticReturnIR>& returns,
     std::vector<SemanticIfIR>& if_statements,
     std::vector<SemanticWhileIR>& while_statements,
     std::vector<SemanticForIR>& for_statements,
@@ -1244,6 +1312,25 @@ static void lowerBodyPhrases(
                 order.push_back({SemanticStatementKind::Call, calls.size() - 1});
                 break;
             }
+            case ParsedPhraseKind::ReturnStatement: {
+                auto return_phrase = std::dynamic_pointer_cast<ParsedReturnStatement>(phrase);
+                if (!return_phrase) {
+                    break;
+                }
+
+                SemanticReturnIR node{};
+                node.expression = parseExpressionIR(return_phrase->expression, phraseStartLocation(return_phrase));
+                node.location = phraseStartLocation(return_phrase);
+                returns.push_back(node);
+                order.push_back({SemanticStatementKind::Return, returns.size() - 1});
+                break;
+            }
+            case ParsedPhraseKind::BreakStatement:
+                order.push_back({SemanticStatementKind::Break, 0});
+                break;
+            case ParsedPhraseKind::ContinueStatement:
+                order.push_back({SemanticStatementKind::Continue, 0});
+                break;
             case ParsedPhraseKind::Unknown:
                 if (isControlFlowUnknown(phrase, "if")) {
                     SemanticIfIR node{};
@@ -1257,6 +1344,7 @@ static void lowerBodyPhrases(
                         struct_definitions,
                         enum_definitions,
                         calls,
+                        returns,
                         if_statements,
                         while_statements,
                         for_statements,
@@ -1276,6 +1364,7 @@ static void lowerBodyPhrases(
                         struct_definitions,
                         enum_definitions,
                         calls,
+                        returns,
                         if_statements,
                         while_statements,
                         for_statements,
@@ -1304,6 +1393,7 @@ static void lowerBodyPhrases(
                         struct_definitions,
                         enum_definitions,
                         calls,
+                        returns,
                         if_statements,
                         while_statements,
                         for_statements,
@@ -1352,6 +1442,7 @@ static SemanticFunctionIR lowerFunction(const std::shared_ptr<ParsedFunction>& p
         function_ir.struct_definitions,
         function_ir.enum_definitions,
         function_ir.calls,
+        function_ir.returns,
         function_ir.if_statements,
         function_ir.while_statements,
         function_ir.for_statements,
