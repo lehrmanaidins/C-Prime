@@ -1,0 +1,13 @@
+struct Flags {
+    primitive bool enabled;
+};
+
+function main() {
+    primitive uint8[2] values = {4, 5};
+    Flags flags = {
+        enabled = true
+    };
+
+    println(values[0]);
+    println(flags.enabled);
+}

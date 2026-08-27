@@ -24,26 +24,7 @@
 #include "../parser/phrases/type_definition.cpp"
 #include "../parser/phrases/variable_declaration.cpp"
 #include "expression.cpp"
-
-enum class SemanticTypeKind {
-    Named,
-    Tuple,
-    Reference,
-    Function
-};
-
-struct SemanticTypeRef {
-    SemanticTypeKind kind = SemanticTypeKind::Named;
-    std::string name;
-    bool is_primitive = false;
-    bool is_const = false;
-    bool is_mutable = false;
-    std::vector<SemanticTypeRef> tuple_elements;
-    std::vector<std::string> array_dimensions;
-    std::shared_ptr<SemanticTypeRef> reference_target;
-    std::vector<SemanticTypeRef> function_parameters;
-    std::shared_ptr<SemanticTypeRef> function_return_type;
-};
+#include "type_ref.cpp"
 
 struct SemanticParameterIR {
     std::string name;
@@ -209,12 +190,14 @@ struct SemanticSymbolTable {
     std::unordered_map<std::string, TypeSymbol> known_types;
     std::unordered_set<std::string> known_functions;
     std::unordered_map<std::string, std::string> function_return_types;
+    std::unordered_map<std::string, size_t> function_parameter_counts;
 };
 
 struct ValidationContext {
     const SemanticSymbolTable& symbols;
     std::vector<std::unordered_map<std::string, VariableSymbol>> variable_scopes;
     std::string current_function_return_type;
+    size_t loop_depth = 0;
 };
 
 static SourceLocation phraseStartLocation(const std::shared_ptr<ParsedPhrase>& phrase) {
@@ -257,125 +240,6 @@ static std::string phraseLocation(const std::shared_ptr<ParsedPhrase>& phrase) {
 
 static std::runtime_error semanticError(const std::shared_ptr<ParsedPhrase>& phrase, const std::string& message) {
     return std::runtime_error("Semantic error at " + phraseLocation(phrase) + ": " + message);
-}
-
-static std::string normalizeTypeName(const std::string& raw_type) {
-    std::string type = trim(raw_type);
-    const std::string const_prefix = "const ";
-    if (type.rfind(const_prefix, 0) == 0) {
-        type = trim(type.substr(const_prefix.size()));
-    }
-
-    const std::string mutable_prefix = "mutable ";
-    if (type.rfind(mutable_prefix, 0) == 0) {
-        type = trim(type.substr(mutable_prefix.size()));
-    }
-
-    const std::string primitive_prefix = "primitive ";
-    if (type.rfind(primitive_prefix, 0) == 0) {
-        type = trim(type.substr(primitive_prefix.size()));
-    }
-
-    const size_t bracket_pos = type.find('[');
-    if (bracket_pos != std::string::npos) {
-        type = trim(type.substr(0, bracket_pos));
-    }
-
-    return type;
-}
-
-static bool consumeTypePrefix(std::string& type, const std::string& prefix) {
-    if (type.rfind(prefix, 0) != 0) {
-        return false;
-    }
-
-    type = trim(type.substr(prefix.size()));
-    return true;
-}
-
-static std::string compactTypeSyntax(const std::string& raw_type) {
-    std::string compact;
-    for (char ch : raw_type) {
-        if (std::isspace(static_cast<unsigned char>(ch))) {
-            continue;
-        }
-        compact.push_back(ch);
-    }
-    return compact;
-}
-
-static SemanticTypeRef parseTypeRef(const std::string& raw_type) {
-    std::string type = trim(raw_type);
-
-    SemanticTypeRef base_type{};
-
-    bool consumed_prefix = true;
-    while (consumed_prefix) {
-        consumed_prefix = false;
-        if (consumeTypePrefix(type, "const ")) {
-            base_type.is_const = true;
-            consumed_prefix = true;
-        } else if (consumeTypePrefix(type, "mutable ")) {
-            base_type.is_mutable = true;
-            consumed_prefix = true;
-        } else if (consumeTypePrefix(type, "primitive ")) {
-            base_type.is_primitive = true;
-            consumed_prefix = true;
-        }
-    }
-
-    std::vector<std::string> dimensions{};
-    while (!type.empty() && type.back() == ']') {
-        const size_t open = type.find_last_of('[');
-        if (open == std::string::npos) {
-            break;
-        }
-
-        dimensions.push_back(trim(type.substr(open + 1, type.size() - open - 2)));
-        type = trim(type.substr(0, open));
-    }
-
-    std::reverse(dimensions.begin(), dimensions.end());
-
-    const std::string compact = compactTypeSyntax(type);
-    if (compact.rfind("reference<", 0) == 0 && compact.back() == '>') {
-        const size_t open = type.find('<');
-        const size_t close = type.rfind('>');
-        base_type.kind = SemanticTypeKind::Reference;
-        base_type.name = "reference";
-        base_type.array_dimensions = dimensions;
-        if (open != std::string::npos && close != std::string::npos && close > open) {
-            base_type.reference_target = std::make_shared<SemanticTypeRef>(parseTypeRef(type.substr(open + 1, close - open - 1)));
-        }
-        return base_type;
-    }
-
-    if (type.rfind("function", 0) == 0) {
-        base_type.kind = SemanticTypeKind::Function;
-        base_type.name = "function";
-        base_type.array_dimensions = dimensions;
-        return base_type;
-    }
-
-    if (type.size() >= 2 && type.front() == '(' && type.back() == ')') {
-        base_type.kind = SemanticTypeKind::Tuple;
-        base_type.name = "tuple";
-        base_type.array_dimensions = dimensions;
-
-        const std::string inner = trim(type.substr(1, type.size() - 2));
-        for (const auto& part : splitTopLevel(inner, ',')) {
-            if (!part.empty()) {
-                base_type.tuple_elements.push_back(parseTypeRef(part));
-            }
-        }
-
-        return base_type;
-    }
-
-    base_type.kind = SemanticTypeKind::Named;
-    base_type.name = type;
-    base_type.array_dimensions = dimensions;
-    return base_type;
 }
 
 static bool isKnownType(const SemanticSymbolTable& symbols, const std::string& raw_type) {
@@ -479,6 +343,7 @@ static void collectSymbolsFromFunction(const std::shared_ptr<ParsedFunction>& fu
 
     symbols.known_functions.insert(function_phrase->name);
     symbols.function_return_types[function_phrase->name] = normalizeTypeName(function_phrase->return_type.empty() ? "void" : function_phrase->return_type);
+    symbols.function_parameter_counts[function_phrase->name] = function_phrase->parameters.size();
 
     for (const auto& nested : function_phrase->nested_phrases) {
         collectSymbolsFromPhrase(nested, symbols);
@@ -590,6 +455,48 @@ static bool isNumericPrimitive(const std::string& type_name) {
         || type_name == "float32" || type_name == "float64";
 }
 
+static std::optional<std::string> expressionRootIdentifier(const SemanticExpressionIR& expression) {
+    if (expression.kind == SemanticExpressionKind::Identifier) {
+        return std::optional<std::string>{trim(expression.text)};
+    }
+
+    if ((expression.kind == SemanticExpressionKind::MemberAccess || expression.kind == SemanticExpressionKind::IndexAccess)
+        && !expression.children.empty()) {
+        return expressionRootIdentifier(expression.children.front());
+    }
+
+    return std::nullopt;
+}
+
+static bool isAssignableExpression(const SemanticExpressionIR& expression) {
+    return expression.kind == SemanticExpressionKind::Identifier
+        || expression.kind == SemanticExpressionKind::MemberAccess
+        || expression.kind == SemanticExpressionKind::IndexAccess;
+}
+
+static void validateExpression(
+    const std::shared_ptr<ParsedPhrase>& phrase,
+    const SemanticExpressionIR& expression,
+    ValidationContext& context
+) {
+    if (expression.kind == SemanticExpressionKind::Call) {
+        if (context.symbols.known_functions.find(expression.operator_symbol) == context.symbols.known_functions.end()) {
+            throw semanticError(phrase, "unknown function '" + expression.operator_symbol + "'");
+        }
+
+        if (expression.operator_symbol != "print" && expression.operator_symbol != "println") {
+            auto arity = context.symbols.function_parameter_counts.find(expression.operator_symbol);
+            if (arity != context.symbols.function_parameter_counts.end() && arity->second != expression.children.size()) {
+                throw semanticError(phrase, "function '" + expression.operator_symbol + "' expects " + std::to_string(arity->second) + " argument(s), got " + std::to_string(expression.children.size()));
+            }
+        }
+    }
+
+    for (const auto& child : expression.children) {
+        validateExpression(phrase, child, context);
+    }
+}
+
 static void validateAssignmentCompatibility(
     const std::shared_ptr<ParsedPhrase>& phrase,
     const std::string& target_type,
@@ -662,12 +569,11 @@ static void validateAssignmentCompatibility(
 }
 
 static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, ValidationContext& context);
+static void analyzePhraseList(const std::vector<std::shared_ptr<ParsedPhrase>>& phrases, ValidationContext& context);
 
 static void analyzeControlFlowBody(const std::shared_ptr<ParsedPhrase>& phrase, ValidationContext& context) {
     enterScope(context);
-    for (const auto& nested : phrase->nested_phrases) {
-        analyzePhrase(nested, context);
-    }
+    analyzePhraseList(phrase->nested_phrases, context);
     leaveScope(context);
 }
 
@@ -688,9 +594,7 @@ static void analyzeFunction(
     context.current_function_return_type = return_type;
     enterScope(context);
 
-    for (const auto& nested : function_phrase->nested_phrases) {
-        analyzePhrase(nested, context);
-    }
+    analyzePhraseList(function_phrase->nested_phrases, context);
 
     leaveScope(context);
     context.current_function_return_type = previous_return_type;
@@ -714,6 +618,7 @@ static void analyzeVariableDeclaration(
     }
 
     SemanticExpressionIR initializer_expr = parseExpressionIR(variable_phrase->initializer, phraseStartLocation(variable_phrase));
+    validateExpression(variable_phrase, initializer_expr, context);
     validateAssignmentCompatibility(variable_phrase, variable_type, initializer_expr, context);
 
     declareVariable(
@@ -817,16 +722,27 @@ static void analyzeAssignment(
         return;
     }
 
-    VariableSymbol* symbol = lookupVariable(context, trim(assignment_phrase->left));
+    const SemanticExpressionIR target_expr = parseExpressionIR(assignment_phrase->left, phraseStartLocation(assignment_phrase));
+    if (!isAssignableExpression(target_expr)) {
+        throw semanticError(assignment_phrase, "assignment target is not assignable in phrase: " + joinPhraseText(assignment_phrase));
+    }
+
+    const std::optional<std::string> root_name = expressionRootIdentifier(target_expr);
+    if (!root_name.has_value()) {
+        throw semanticError(assignment_phrase, "assignment target has no variable root in phrase: " + joinPhraseText(assignment_phrase));
+    }
+
+    VariableSymbol* symbol = lookupVariable(context, root_name.value());
     if (symbol == nullptr) {
-        throw semanticError(assignment_phrase, "assignment to undeclared variable '" + trim(assignment_phrase->left) + "' in phrase: " + joinPhraseText(assignment_phrase));
+        throw semanticError(assignment_phrase, "assignment to undeclared variable '" + root_name.value() + "' in phrase: " + joinPhraseText(assignment_phrase));
     }
 
     if (!symbol->is_mutable) {
-        throw semanticError(assignment_phrase, "assignment to immutable variable '" + trim(assignment_phrase->left) + "' in phrase: " + joinPhraseText(assignment_phrase));
+        throw semanticError(assignment_phrase, "assignment to immutable variable '" + root_name.value() + "' in phrase: " + joinPhraseText(assignment_phrase));
     }
 
     SemanticExpressionIR expr = parseExpressionIR(assignment_phrase->right, phraseStartLocation(assignment_phrase));
+    validateExpression(assignment_phrase, expr, context);
     validateAssignmentCompatibility(assignment_phrase, symbol->type_name, expr, context);
 }
 
@@ -864,8 +780,15 @@ static void analyzeCallStatement(
         throw semanticError(call_phrase, "unknown function '" + call_phrase->name + "'");
     }
 
+    if (call_phrase->name != "print" && call_phrase->name != "println") {
+        auto arity = context.symbols.function_parameter_counts.find(call_phrase->name);
+        if (arity != context.symbols.function_parameter_counts.end() && arity->second != call_phrase->arguments.size()) {
+            throw semanticError(call_phrase, "function '" + call_phrase->name + "' expects " + std::to_string(arity->second) + " argument(s), got " + std::to_string(call_phrase->arguments.size()));
+        }
+    }
+
     for (const auto& argument : call_phrase->arguments) {
-        (void)parseExpressionIR(argument, phraseStartLocation(call_phrase));
+        validateExpression(call_phrase, parseExpressionIR(argument, phraseStartLocation(call_phrase)), context);
     }
 }
 
@@ -892,6 +815,7 @@ static void analyzeReturnStatement(
     }
 
     SemanticExpressionIR expression = parseExpressionIR(returned_expression, phraseStartLocation(return_phrase));
+    validateExpression(return_phrase, expression, context);
     validateAssignmentCompatibility(return_phrase, expected_type, expression, context);
 }
 
@@ -933,13 +857,24 @@ static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, Validatio
             analyzeReturnStatement(std::dynamic_pointer_cast<ParsedReturnStatement>(phrase), context);
             break;
         case ParsedPhraseKind::BreakStatement:
+            if (context.loop_depth == 0) {
+                throw semanticError(phrase, "break used outside of a loop");
+            }
+            break;
         case ParsedPhraseKind::ContinueStatement:
+            if (context.loop_depth == 0) {
+                throw semanticError(phrase, "continue used outside of a loop");
+            }
             break;
         case ParsedPhraseKind::IfStatement:
-        case ParsedPhraseKind::WhileStatement:
-        case ParsedPhraseKind::ForStatement:
         case ParsedPhraseKind::ElseStatement:
             analyzeControlFlowBody(phrase, context);
+            break;
+        case ParsedPhraseKind::WhileStatement:
+        case ParsedPhraseKind::ForStatement:
+            ++context.loop_depth;
+            analyzeControlFlowBody(phrase, context);
+            --context.loop_depth;
             break;
         case ParsedPhraseKind::Unknown:
             analyzeUnknown(phrase);
@@ -949,6 +884,28 @@ static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, Validatio
             break;
         default:
             throw semanticError(phrase, "unsupported parsed phrase kind");
+    }
+}
+
+static void analyzePhraseList(const std::vector<std::shared_ptr<ParsedPhrase>>& phrases, ValidationContext& context) {
+    bool previous_allows_else = false;
+
+    for (const auto& phrase : phrases) {
+        if (!phrase) {
+            continue;
+        }
+
+        if (phrase->kind == ParsedPhraseKind::ElseStatement && !previous_allows_else) {
+            throw semanticError(phrase, "else without a preceding if or else-if");
+        }
+
+        analyzePhrase(phrase, context);
+
+        previous_allows_else = phrase->kind == ParsedPhraseKind::IfStatement;
+        if (phrase->kind == ParsedPhraseKind::ElseStatement) {
+            auto else_phrase = std::dynamic_pointer_cast<ParsedElseStatement>(phrase);
+            previous_allows_else = else_phrase && !else_phrase->condition.empty();
+        }
     }
 }
 
@@ -968,6 +925,8 @@ static SemanticSymbolTable collectSymbols(const ParsedPhrases& phrases) {
     symbols.known_functions.insert("println");
     symbols.function_return_types["print"] = "void";
     symbols.function_return_types["println"] = "void";
+    symbols.function_parameter_counts["print"] = 0;
+    symbols.function_parameter_counts["println"] = 0;
 
     for (const auto& phrase : phrases) {
         collectSymbolsFromPhrase(phrase, symbols);
@@ -980,9 +939,7 @@ static void validateSemantics(const ParsedPhrases& phrases, const SemanticSymbol
     ValidationContext validation_context{symbols};
     enterScope(validation_context);
 
-    for (const auto& phrase : phrases) {
-        analyzePhrase(phrase, validation_context);
-    }
+    analyzePhraseList(phrases, validation_context);
 
     leaveScope(validation_context);
 }

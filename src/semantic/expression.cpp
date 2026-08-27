@@ -16,6 +16,9 @@ enum class SemanticExpressionKind {
     Literal,
     Binary,
     Call,
+    MemberAccess,
+    IndexAccess,
+    QualifiedName,
     TupleLiteral,
     InitializerList,
     Raw
@@ -374,6 +377,150 @@ static std::optional<size_t> findCallOpenParen(const std::string& expression) {
     return std::nullopt;
 }
 
+static std::optional<size_t> findTopLevelChar(const std::string& expression, char target) {
+    int paren_depth = 0;
+    int brace_depth = 0;
+    int bracket_depth = 0;
+    char quote = '\0';
+    bool escaped = false;
+    std::optional<size_t> found{};
+
+    for (size_t i = 0; i < expression.size(); ++i) {
+        const char ch = expression[i];
+        if (quote != '\0') {
+            if (ch == '\\' && !escaped) {
+                escaped = true;
+                continue;
+            }
+            if (ch == quote && !escaped) {
+                quote = '\0';
+            }
+            escaped = false;
+            continue;
+        }
+
+        if (ch == '"' || ch == '\'') {
+            quote = ch;
+            continue;
+        }
+
+        if (ch == '(') {
+            ++paren_depth;
+            continue;
+        }
+        if (ch == ')') {
+            if (paren_depth > 0) --paren_depth;
+            continue;
+        }
+        if (ch == '{') {
+            ++brace_depth;
+            continue;
+        }
+        if (ch == '}') {
+            if (brace_depth > 0) --brace_depth;
+            continue;
+        }
+        if (ch == '[') {
+            ++bracket_depth;
+            continue;
+        }
+        if (ch == ']') {
+            if (bracket_depth > 0) --bracket_depth;
+            continue;
+        }
+
+        if (ch == target && paren_depth == 0 && brace_depth == 0 && bracket_depth == 0) {
+            found = i;
+        }
+    }
+
+    return found;
+}
+
+static std::optional<size_t> findTopLevelDoubleColon(const std::string& expression) {
+    int paren_depth = 0;
+    int brace_depth = 0;
+    int bracket_depth = 0;
+    char quote = '\0';
+    bool escaped = false;
+    std::optional<size_t> found{};
+
+    for (size_t i = 0; i + 1 < expression.size(); ++i) {
+        const char ch = expression[i];
+        if (quote != '\0') {
+            if (ch == '\\' && !escaped) {
+                escaped = true;
+                continue;
+            }
+            if (ch == quote && !escaped) {
+                quote = '\0';
+            }
+            escaped = false;
+            continue;
+        }
+
+        if (ch == '"' || ch == '\'') {
+            quote = ch;
+            continue;
+        }
+
+        if (ch == '(') ++paren_depth;
+        else if (ch == ')' && paren_depth > 0) --paren_depth;
+        else if (ch == '{') ++brace_depth;
+        else if (ch == '}' && brace_depth > 0) --brace_depth;
+        else if (ch == '[') ++bracket_depth;
+        else if (ch == ']' && bracket_depth > 0) --bracket_depth;
+
+        if (expression.compare(i, 2, "::") == 0 && paren_depth == 0 && brace_depth == 0 && bracket_depth == 0) {
+            found = i;
+        }
+    }
+
+    return found;
+}
+
+static std::optional<size_t> findPostfixIndexOpen(const std::string& expression) {
+    if (expression.empty() || expression.back() != ']') {
+        return std::nullopt;
+    }
+
+    int bracket_depth = 0;
+    char quote = '\0';
+    bool escaped = false;
+
+    for (size_t offset = expression.size(); offset > 0; --offset) {
+        const size_t i = offset - 1;
+        const char ch = expression[i];
+        if (quote != '\0') {
+            if (ch == '\\' && !escaped) {
+                escaped = true;
+                continue;
+            }
+            if (ch == quote && !escaped) {
+                quote = '\0';
+            }
+            escaped = false;
+            continue;
+        }
+
+        if (ch == '"' || ch == '\'') {
+            quote = ch;
+            continue;
+        }
+
+        if (ch == ']') {
+            ++bracket_depth;
+        } else if (ch == '[') {
+            --bracket_depth;
+            if (bracket_depth == 0) {
+                return i;
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 static SemanticExpressionIR parseExpressionIR(const std::string& raw_expression, SourceLocation location) {
     const std::string expression = trim(raw_expression);
 
@@ -441,6 +588,30 @@ static SemanticExpressionIR parseExpressionIR(const std::string& raw_expression,
             expr.children.push_back(parseExpressionIR(expression.substr(pos.value() + op.size()), location));
             return expr;
         }
+    }
+
+    if (const std::optional<size_t> pos = findTopLevelDoubleColon(expression); pos.has_value()) {
+        expr.kind = SemanticExpressionKind::QualifiedName;
+        expr.operator_symbol = "::";
+        expr.children.push_back(parseExpressionIR(expression.substr(0, pos.value()), location));
+        expr.children.push_back(parseExpressionIR(expression.substr(pos.value() + 2), location));
+        return expr;
+    }
+
+    if (const std::optional<size_t> pos = findTopLevelChar(expression, '.'); pos.has_value()) {
+        expr.kind = SemanticExpressionKind::MemberAccess;
+        expr.operator_symbol = ".";
+        expr.children.push_back(parseExpressionIR(expression.substr(0, pos.value()), location));
+        expr.children.push_back(parseExpressionIR(expression.substr(pos.value() + 1), location));
+        return expr;
+    }
+
+    if (const std::optional<size_t> open_bracket = findPostfixIndexOpen(expression); open_bracket.has_value() && open_bracket.value() > 0) {
+        expr.kind = SemanticExpressionKind::IndexAccess;
+        expr.operator_symbol = "[]";
+        expr.children.push_back(parseExpressionIR(expression.substr(0, open_bracket.value()), location));
+        expr.children.push_back(parseExpressionIR(expression.substr(open_bracket.value() + 1, expression.size() - open_bracket.value() - 2), location));
+        return expr;
     }
 
     const std::optional<size_t> open_paren = findCallOpenParen(expression);

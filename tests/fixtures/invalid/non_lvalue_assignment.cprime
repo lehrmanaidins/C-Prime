@@ -1,0 +1,4 @@
+function main() {
+    mutable primitive uint32 value = 1;
+    value + 1 = 2;
+}

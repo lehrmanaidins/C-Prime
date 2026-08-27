@@ -1,0 +1,7 @@
+function add(primitive uint32 left, primitive uint32 right) -> primitive uint32 {
+    return left + right;
+}
+
+function main() {
+    primitive uint32 value = add(1);
+}

@@ -157,6 +157,21 @@ static std::string emitExpression(const SemanticExpressionIR& expression, CppEmi
             call += ")";
             return call;
         }
+        case SemanticExpressionKind::MemberAccess:
+            if (expression.children.size() == 2) {
+                return emitExpression(expression.children[0], context) + "." + emitExpression(expression.children[1], context);
+            }
+            return expression.text;
+        case SemanticExpressionKind::IndexAccess:
+            if (expression.children.size() == 2) {
+                return emitExpression(expression.children[0], context) + "[" + emitExpression(expression.children[1], context) + "]";
+            }
+            return expression.text;
+        case SemanticExpressionKind::QualifiedName:
+            if (expression.children.size() == 2) {
+                return emitExpression(expression.children[0], context) + "::" + emitExpression(expression.children[1], context);
+            }
+            return expression.text;
         case SemanticExpressionKind::TupleLiteral: {
             std::string tuple = "std::make_tuple(";
             context.required_headers.insert("<tuple>");
