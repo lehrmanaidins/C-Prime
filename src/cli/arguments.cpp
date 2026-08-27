@@ -94,3 +94,37 @@ static CliOptions parseCliOptions(int argc, char* argv[]) {
 
     return options;
 }
+
+static std::string sourceBasename(const std::string& filename) {
+    const std::string extension = ".cprime";
+    if (filename.size() >= extension.size()
+        && filename.substr(filename.size() - extension.size()) == extension) {
+        return filename.substr(0, filename.size() - extension.size());
+    }
+
+    return filename;
+}
+
+static std::string defaultCppOutputFilename(const CliOptions& options) {
+    if (!options.output_filename.empty()) {
+        return options.output_filename;
+    }
+
+    return sourceBasename(options.filename) + ".cpp";
+}
+
+static std::string defaultBinaryFilename(const CliOptions& options) {
+    if (!options.binary_filename.empty()) {
+        return options.binary_filename;
+    }
+
+    return sourceBasename(options.filename);
+}
+
+static bool shouldEmitCppFile(const CliOptions& options) {
+    return options.mode == CliMode::EmitCpp || options.mode == CliMode::EmitAndCompile;
+}
+
+static bool shouldCompileBinary(const CliOptions& options) {
+    return options.mode == CliMode::CompileOnly || options.mode == CliMode::EmitAndCompile;
+}

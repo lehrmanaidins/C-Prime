@@ -59,7 +59,7 @@ int main() {
     const std::tuple<uint32_t, uint32_t> limits = std::make_tuple(10, 20);
     const std::array<Distance, 3> checkpoints = {100, 200, 300};
     const Telemetry telemetry = {.altitude = 1000, .velocity = 42, .healthy = true};
-    const SystemState state = SystemState :: RUNNING;
+    const SystemState state = SystemState::RUNNING;
     const uint32_t total = add_u32(unsigned32, counter);
     const bool has_distance = (altitude > 0);
     const bool should_print = (has_distance && enabled);
