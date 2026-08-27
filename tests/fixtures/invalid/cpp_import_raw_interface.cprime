@@ -1,0 +1,6 @@
+import "imports/raw_cpp_interface.cpp";
+
+function main() {
+    primitive uint32 value = raw_add(1, 2);
+    println(value);
+}

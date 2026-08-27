@@ -1,0 +1,5 @@
+import "imports/does_not_exist.cprime";
+
+function main() {
+    println("missing");
+}

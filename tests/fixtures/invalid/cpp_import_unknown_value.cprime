@@ -1,0 +1,6 @@
+import "imports/native_math.cpp";
+
+function main() {
+    primitive uint32 value = native_missing_value;
+    println(value);
+}

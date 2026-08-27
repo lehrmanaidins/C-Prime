@@ -1,0 +1,6 @@
+import "imports/no_runtime_header.cpp";
+
+function main() {
+    primitive uint32 value = hidden_add(1, 2);
+    println(value);
+}

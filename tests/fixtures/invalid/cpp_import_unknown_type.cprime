@@ -1,0 +1,8 @@
+import "imports/native_math.cpp";
+
+function main() {
+    NativeMissing value = {
+        value = 1
+    };
+    println(value.value);
+}

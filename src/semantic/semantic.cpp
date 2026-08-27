@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <fstream>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -16,6 +18,7 @@
 #include "../parser/phrases/enum_definition.cpp"
 #include "../parser/phrases/enum_value_definition.cpp"
 #include "../parser/phrases/function.cpp"
+#include "../parser/phrases/import.cpp"
 #include "../parser/phrases/parameter_declaration.cpp"
 #include "../parser/phrases/parameter_definition.cpp"
 #include "../parser/phrases/return_statement.cpp"
@@ -71,6 +74,16 @@ struct SemanticEnumDefinitionIR {
     SourceLocation location;
 };
 
+enum class SemanticImportKind {
+    Cpp
+};
+
+struct SemanticImportIR {
+    std::string path;
+    SemanticImportKind import_kind;
+    SourceLocation location;
+};
+
 struct SemanticCallIR {
     std::string name;
     std::vector<SemanticExpressionIR> arguments;
@@ -92,6 +105,7 @@ enum class SemanticStatementKind {
     TypeDefinition,
     StructDefinition,
     EnumDefinition,
+    Import,
     If,
     While,
     For,
@@ -143,6 +157,7 @@ struct SemanticFunctionIR {
     std::vector<SemanticTypeDefinitionIR> type_definitions;
     std::vector<SemanticStructDefinitionIR> struct_definitions;
     std::vector<SemanticEnumDefinitionIR> enum_definitions;
+    std::vector<SemanticImportIR> imports;
     std::vector<SemanticCallIR> calls;
     std::vector<SemanticReturnIR> returns;
     std::vector<SemanticIfIR> if_statements;
@@ -161,6 +176,7 @@ struct SemanticProgram {
     std::vector<SemanticTypeDefinitionIR> type_definitions;
     std::vector<SemanticStructDefinitionIR> struct_definitions;
     std::vector<SemanticEnumDefinitionIR> enum_definitions;
+    std::vector<SemanticImportIR> imports;
     std::vector<SemanticCallIR> calls;
     std::vector<SemanticIfIR> if_statements;
     std::vector<SemanticWhileIR> while_statements;
@@ -191,6 +207,8 @@ struct SemanticSymbolTable {
     std::unordered_set<std::string> known_functions;
     std::unordered_map<std::string, std::string> function_return_types;
     std::unordered_map<std::string, size_t> function_parameter_counts;
+    std::unordered_map<std::string, VariableSymbol> external_values;
+    bool has_cpp_imports = false;
 };
 
 struct ValidationContext {
@@ -199,6 +217,8 @@ struct ValidationContext {
     std::string current_function_return_type;
     size_t loop_depth = 0;
 };
+
+#include "cpp_import_symbols.cpp"
 
 static SourceLocation phraseStartLocation(const std::shared_ptr<ParsedPhrase>& phrase) {
     if (!phrase || !phrase->source_phrase) {
@@ -401,6 +421,14 @@ static void collectSymbolsFromPhrase(const std::shared_ptr<ParsedPhrase>& phrase
             }
             break;
         }
+        case ParsedPhraseKind::ImportStatement: {
+            auto import_statement = std::dynamic_pointer_cast<ParsedImportStatement>(phrase);
+            if (import_statement && import_statement->import_kind == ParsedImportKind::Cpp) {
+                symbols.has_cpp_imports = true;
+                registerCppImportSymbols(import_statement->path, symbols);
+            }
+            break;
+        }
         default:
             for (const auto& nested : phrase->nested_phrases) {
                 collectSymbolsFromPhrase(nested, symbols);
@@ -418,6 +446,10 @@ static std::optional<std::string> inferExpressionTypeName(
             VariableSymbol* symbol = lookupVariable(context, trim(expression.text));
             if (symbol) {
                 return std::optional<std::string>{symbol->type_name};
+            }
+            auto external_it = context.symbols.external_values.find(trim(expression.text));
+            if (external_it != context.symbols.external_values.end()) {
+                return std::optional<std::string>{external_it->second.type_name};
             }
             return std::nullopt;
         }
@@ -479,12 +511,36 @@ static void validateExpression(
     const SemanticExpressionIR& expression,
     ValidationContext& context
 ) {
+    if (expression.kind == SemanticExpressionKind::Identifier) {
+        const std::string name = trim(expression.text);
+        if (lookupVariable(context, name) == nullptr
+            && context.symbols.external_values.find(name) == context.symbols.external_values.end()) {
+            throw semanticError(phrase, "unknown value '" + name + "'");
+        }
+        return;
+    }
+
+    if (expression.kind == SemanticExpressionKind::QualifiedName) {
+        if (expression.children.size() == 2) {
+            const std::string qualifier = trim(expression.children[0].text);
+            if (context.symbols.known_types.find(normalizeTypeName(qualifier)) == context.symbols.known_types.end()) {
+                throw semanticError(phrase, "unknown type '" + qualifier + "'");
+            }
+        }
+        return;
+    }
+
+    if (expression.kind == SemanticExpressionKind::MemberAccess) {
+        if (!expression.children.empty()) {
+            validateExpression(phrase, expression.children.front(), context);
+        }
+        return;
+    }
+
     if (expression.kind == SemanticExpressionKind::Call) {
         if (context.symbols.known_functions.find(expression.operator_symbol) == context.symbols.known_functions.end()) {
             throw semanticError(phrase, "unknown function '" + expression.operator_symbol + "'");
-        }
-
-        if (expression.operator_symbol != "print" && expression.operator_symbol != "println") {
+        } else if (expression.operator_symbol != "print" && expression.operator_symbol != "println") {
             auto arity = context.symbols.function_parameter_counts.find(expression.operator_symbol);
             if (arity != context.symbols.function_parameter_counts.end() && arity->second != expression.children.size()) {
                 throw semanticError(phrase, "function '" + expression.operator_symbol + "' expects " + std::to_string(arity->second) + " argument(s), got " + std::to_string(expression.children.size()));
@@ -574,6 +630,50 @@ static void analyzePhraseList(const std::vector<std::shared_ptr<ParsedPhrase>>& 
 static void analyzeControlFlowBody(const std::shared_ptr<ParsedPhrase>& phrase, ValidationContext& context) {
     enterScope(context);
     analyzePhraseList(phrase->nested_phrases, context);
+    leaveScope(context);
+}
+
+static void analyzeForStatement(const std::shared_ptr<ParsedForStatement>& for_phrase, ValidationContext& context) {
+    if (!for_phrase) {
+        return;
+    }
+
+    enterScope(context);
+    if (!for_phrase->initializer.empty()) {
+        const size_t equal_pos = for_phrase->initializer.find('=');
+        if (equal_pos != std::string::npos) {
+            std::string lhs = trim(for_phrase->initializer.substr(0, equal_pos));
+            const bool is_mutable = lhs.rfind("mutable ", 0) == 0;
+            if (is_mutable) {
+                lhs = trim(lhs.substr(8));
+            } else if (lhs.rfind("const ", 0) == 0) {
+                lhs = trim(lhs.substr(6));
+            }
+
+            const size_t name_start = lhs.find_last_of(" \t");
+            if (name_start != std::string::npos) {
+                const std::string type_name = trim(lhs.substr(0, name_start));
+                const std::string name = trim(lhs.substr(name_start + 1));
+                if (!type_name.empty() && !name.empty() && isKnownTypeRefString(context.symbols, type_name)) {
+                    declareVariable(context, name, normalizeTypeName(type_name), is_mutable, for_phrase);
+                }
+            }
+        } else {
+            validateExpression(for_phrase, parseExpressionIR(for_phrase->initializer, phraseStartLocation(for_phrase)), context);
+        }
+    }
+
+    if (!for_phrase->condition.empty()) {
+        validateExpression(for_phrase, parseExpressionIR(for_phrase->condition, phraseStartLocation(for_phrase)), context);
+    }
+
+    if (!for_phrase->update.empty()) {
+        validateExpression(for_phrase, parseExpressionIR(for_phrase->update, phraseStartLocation(for_phrase)), context);
+    }
+
+    ++context.loop_depth;
+    analyzePhraseList(for_phrase->nested_phrases, context);
+    --context.loop_depth;
     leaveScope(context);
 }
 
@@ -778,9 +878,7 @@ static void analyzeCallStatement(
 
     if (context.symbols.known_functions.find(call_phrase->name) == context.symbols.known_functions.end()) {
         throw semanticError(call_phrase, "unknown function '" + call_phrase->name + "'");
-    }
-
-    if (call_phrase->name != "print" && call_phrase->name != "println") {
+    } else if (call_phrase->name != "print" && call_phrase->name != "println") {
         auto arity = context.symbols.function_parameter_counts.find(call_phrase->name);
         if (arity != context.symbols.function_parameter_counts.end() && arity->second != call_phrase->arguments.size()) {
             throw semanticError(call_phrase, "function '" + call_phrase->name + "' expects " + std::to_string(arity->second) + " argument(s), got " + std::to_string(call_phrase->arguments.size()));
@@ -844,6 +942,8 @@ static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, Validatio
         case ParsedPhraseKind::EnumDefinition:
             analyzeEnumDefinition(std::dynamic_pointer_cast<ParsedEnumDefinition>(phrase), context);
             break;
+        case ParsedPhraseKind::ImportStatement:
+            break;
         case ParsedPhraseKind::Assignment:
             analyzeAssignment(std::dynamic_pointer_cast<ParsedAssignment>(phrase), context);
             break;
@@ -871,10 +971,12 @@ static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, Validatio
             analyzeControlFlowBody(phrase, context);
             break;
         case ParsedPhraseKind::WhileStatement:
-        case ParsedPhraseKind::ForStatement:
             ++context.loop_depth;
             analyzeControlFlowBody(phrase, context);
             --context.loop_depth;
+            break;
+        case ParsedPhraseKind::ForStatement:
+            analyzeForStatement(std::dynamic_pointer_cast<ParsedForStatement>(phrase), context);
             break;
         case ParsedPhraseKind::Unknown:
             analyzeUnknown(phrase);
@@ -1022,6 +1124,14 @@ static SemanticEnumDefinitionIR lowerEnumDefinition(const std::shared_ptr<Parsed
     return node;
 }
 
+static SemanticImportIR lowerImportStatement(const std::shared_ptr<ParsedImportStatement>& phrase) {
+    SemanticImportIR node{};
+    node.path = phrase ? phrase->path : "";
+    node.import_kind = SemanticImportKind::Cpp;
+    node.location = phraseStartLocation(phrase);
+    return node;
+}
+
 static void lowerBodyPhrases(
     const std::vector<std::shared_ptr<ParsedPhrase>>& phrases,
     std::vector<SemanticVariableDeclarationIR>& variable_declarations,
@@ -1029,6 +1139,7 @@ static void lowerBodyPhrases(
     std::vector<SemanticTypeDefinitionIR>& type_definitions,
     std::vector<SemanticStructDefinitionIR>& struct_definitions,
     std::vector<SemanticEnumDefinitionIR>& enum_definitions,
+    std::vector<SemanticImportIR>& imports,
     std::vector<SemanticCallIR>& calls,
     std::vector<SemanticReturnIR>& returns,
     std::vector<SemanticIfIR>& if_statements,
@@ -1045,6 +1156,7 @@ static void lowerBodyPhrases(
     std::vector<SemanticTypeDefinitionIR>& type_definitions,
     std::vector<SemanticStructDefinitionIR>& struct_definitions,
     std::vector<SemanticEnumDefinitionIR>& enum_definitions,
+    std::vector<SemanticImportIR>& imports,
     std::vector<SemanticCallIR>& calls,
     std::vector<SemanticReturnIR>& returns,
     std::vector<SemanticIfIR>& if_statements,
@@ -1087,6 +1199,14 @@ static void lowerBodyPhrases(
                 auto node = lowerEnumDefinition(std::dynamic_pointer_cast<ParsedEnumDefinition>(phrase));
                 enum_definitions.push_back(node);
                 order.push_back({SemanticStatementKind::EnumDefinition, enum_definitions.size() - 1});
+                break;
+            }
+            case ParsedPhraseKind::ImportStatement: {
+                auto import_phrase = std::dynamic_pointer_cast<ParsedImportStatement>(phrase);
+                if (import_phrase && import_phrase->import_kind == ParsedImportKind::Cpp) {
+                    imports.push_back(lowerImportStatement(import_phrase));
+                    order.push_back({SemanticStatementKind::Import, imports.size() - 1});
+                }
                 break;
             }
             case ParsedPhraseKind::CallStatement: {
@@ -1136,6 +1256,7 @@ static void lowerBodyPhrases(
                         type_definitions,
                         struct_definitions,
                         enum_definitions,
+                        imports,
                         calls,
                         returns,
                         if_statements,
@@ -1160,6 +1281,7 @@ static void lowerBodyPhrases(
                         type_definitions,
                         struct_definitions,
                         enum_definitions,
+                        imports,
                         calls,
                         returns,
                         if_statements,
@@ -1186,6 +1308,7 @@ static void lowerBodyPhrases(
                         type_definitions,
                         struct_definitions,
                         enum_definitions,
+                        imports,
                         calls,
                         returns,
                         if_statements,
@@ -1210,6 +1333,7 @@ static void lowerBodyPhrases(
                         type_definitions,
                         struct_definitions,
                         enum_definitions,
+                        imports,
                         calls,
                         returns,
                         if_statements,
@@ -1260,6 +1384,7 @@ static SemanticFunctionIR lowerFunction(const std::shared_ptr<ParsedFunction>& p
         function_ir.type_definitions,
         function_ir.struct_definitions,
         function_ir.enum_definitions,
+        function_ir.imports,
         function_ir.calls,
         function_ir.returns,
         function_ir.if_statements,
@@ -1304,6 +1429,14 @@ static void lowerTopLevelPhrase(const std::shared_ptr<ParsedPhrase>& phrase, Sem
         case ParsedPhraseKind::EnumDefinition: {
             program.enum_definitions.push_back(lowerEnumDefinition(std::dynamic_pointer_cast<ParsedEnumDefinition>(phrase)));
             program.top_level_order.push_back({SemanticStatementKind::EnumDefinition, program.enum_definitions.size() - 1});
+            break;
+        }
+        case ParsedPhraseKind::ImportStatement: {
+            auto import_phrase = std::dynamic_pointer_cast<ParsedImportStatement>(phrase);
+            if (import_phrase && import_phrase->import_kind == ParsedImportKind::Cpp) {
+                program.imports.push_back(lowerImportStatement(import_phrase));
+                program.top_level_order.push_back({SemanticStatementKind::Import, program.imports.size() - 1});
+            }
             break;
         }
         default:

@@ -1,0 +1,6 @@
+import "imports/cprime_math.cprime";
+
+function main() {
+    primitive uint32 value = imported_add(2, 4);
+    println(value);
+}

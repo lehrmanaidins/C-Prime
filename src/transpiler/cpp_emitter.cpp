@@ -212,6 +212,7 @@ static void emitStatementRef(
     const std::vector<SemanticTypeDefinitionIR>& types,
     const std::vector<SemanticStructDefinitionIR>& structs,
     const std::vector<SemanticEnumDefinitionIR>& enums,
+    const std::vector<SemanticImportIR>& imports,
     const std::vector<SemanticCallIR>& calls,
     const std::vector<SemanticReturnIR>& returns,
     const std::vector<SemanticIfIR>& ifs,
@@ -247,6 +248,14 @@ static std::string emitStructInitializerExpression(const SemanticExpressionIR& e
 }
 
 static std::string emitVariableInitializer(const SemanticVariableDeclarationIR& var, CppEmitContext& context) {
+    if (var.initializer.kind == SemanticExpressionKind::InitializerList) {
+        for (const auto& child : var.initializer.children) {
+            if (child.text.find('=') != std::string::npos) {
+                return emitStructInitializerExpression(var.initializer, context);
+            }
+        }
+    }
+
     if (var.initializer.kind == SemanticExpressionKind::InitializerList
         && var.type.kind == SemanticTypeKind::Named
         && context.struct_types.find(var.type.name) != context.struct_types.end()) {
@@ -330,6 +339,7 @@ static void emitStatementList(
     const std::vector<SemanticTypeDefinitionIR>& types,
     const std::vector<SemanticStructDefinitionIR>& structs,
     const std::vector<SemanticEnumDefinitionIR>& enums,
+    const std::vector<SemanticImportIR>& imports,
     const std::vector<SemanticCallIR>& calls,
     const std::vector<SemanticReturnIR>& returns,
     const std::vector<SemanticIfIR>& ifs,
@@ -339,7 +349,7 @@ static void emitStatementList(
     size_t indent_depth
 ) {
     for (const auto& ref : order) {
-        emitStatementRef(output, context, ref, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth);
+        emitStatementRef(output, context, ref, vars, assigns, types, structs, enums, imports, calls, returns, ifs, whiles, fors, elses, indent_depth);
     }
 }
 
@@ -352,6 +362,7 @@ static void emitStatementRef(
     const std::vector<SemanticTypeDefinitionIR>& types,
     const std::vector<SemanticStructDefinitionIR>& structs,
     const std::vector<SemanticEnumDefinitionIR>& enums,
+    const std::vector<SemanticImportIR>& imports,
     const std::vector<SemanticCallIR>& calls,
     const std::vector<SemanticReturnIR>& returns,
     const std::vector<SemanticIfIR>& ifs,
@@ -405,6 +416,12 @@ static void emitStatementRef(
             appendLine(output, context, i + "};");
             break;
         }
+        case SemanticStatementKind::Import: {
+            const auto& import = imports[ref.index];
+            context.pushLine(import.location, "import");
+            appendLine(output, context, "#include \"" + import.path + "\"");
+            break;
+        }
         case SemanticStatementKind::Call: {
             const auto& call = calls[ref.index];
             context.pushLine(call.location, "call");
@@ -449,7 +466,7 @@ static void emitStatementRef(
             const auto& node = ifs[ref.index];
             context.pushLine(node.location, "if");
             appendLine(output, context, i + "if (" + emitExpression(node.condition, context) + ") {");
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, imports, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
@@ -461,7 +478,7 @@ static void emitStatementRef(
             } else {
                 appendLine(output, context, i + "else if (" + emitExpression(node.condition, context) + ") {");
             }
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, imports, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
@@ -469,7 +486,7 @@ static void emitStatementRef(
             const auto& node = whiles[ref.index];
             context.pushLine(node.location, "while");
             appendLine(output, context, i + "while (" + emitExpression(node.condition, context) + ") {");
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, imports, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
@@ -477,7 +494,7 @@ static void emitStatementRef(
             const auto& node = fors[ref.index];
             context.pushLine(node.location, "for");
             appendLine(output, context, i + "for (" + emitForClauseExpression(node.initializer, context) + "; " + emitForClauseExpression(node.condition, context) + "; " + emitForClauseExpression(node.update, context) + ") {");
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, imports, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
@@ -501,6 +518,7 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
             program.type_definitions,
             program.struct_definitions,
             program.enum_definitions,
+            program.imports,
             program.calls,
             no_top_level_returns,
             program.if_statements,
@@ -533,6 +551,7 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
             function.type_definitions,
             function.struct_definitions,
             function.enum_definitions,
+            program.imports,
             function.calls,
             function.returns,
             function.if_statements,
@@ -549,6 +568,8 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
 
     std::string output;
     output += "// Generated by C-Prime transpiler\n";
+
+    context.required_headers.insert("\"src/runtime/c-prime.hpp\"");
 
     if (context.required_headers.empty()) {
         context.required_headers.insert("<cstdint>");

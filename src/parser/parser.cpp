@@ -11,6 +11,7 @@
 #include "phrases/enum_definition.cpp"
 #include "phrases/enum_value_definition.cpp"
 #include "phrases/function.cpp"
+#include "phrases/import.cpp"
 #include "phrases/parameter_declaration.cpp"
 #include "phrases/parameter_definition.cpp"
 #include "phrases/return_statement.cpp"
@@ -106,7 +107,8 @@ static bool isDeclarationStarter(const std::string& value) {
         || value == "type"
         || value == "struct"
         || value == "enum"
-        || value == "function";
+        || value == "function"
+        || value == "import";
 }
 
 static std::string findMissingSemicolonBeforeToken(const Tokens& tokens) {
@@ -284,6 +286,30 @@ static bool isContinuePhrase(const std::shared_ptr<Phrase>& phrase) {
 
 static bool isKeywordPhrase(const std::shared_ptr<Phrase>& phrase, const std::string& keyword) {
     return phrase && !phrase->tokens.empty() && phrase->tokens[0] && phrase->tokens[0]->value == keyword;
+}
+
+static bool hasSuffix(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size()
+        && value.substr(value.size() - suffix.size()) == suffix;
+}
+
+static std::string unquoteImportPath(const std::string& raw_path) {
+    const std::string path = trimParserText(raw_path);
+    if (path.size() >= 2
+        && ((path.front() == '"' && path.back() == '"')
+            || (path.front() == '\'' && path.back() == '\''))) {
+        return path.substr(1, path.size() - 2);
+    }
+
+    return path;
+}
+
+static ParsedImportKind detectImportKind(const std::string& path) {
+    if (hasSuffix(path, ".cprime")) {
+        return ParsedImportKind::CPrime;
+    }
+
+    return ParsedImportKind::Cpp;
 }
 
 static bool isAssignmentPhrase(const std::shared_ptr<Phrase>& phrase) {
@@ -647,6 +673,11 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
     } else if (isKeywordPhrase(phrase, "else")) {
         const bool is_else_if = phrase->tokens.size() > 1 && phrase->tokens[1] && phrase->tokens[1]->value == "if";
         parsed_phrase = std::make_shared<ParsedElseStatement>(is_else_if ? parseParenthesizedContent(phrase->tokens) : "", phrase);
+    } else if (isKeywordPhrase(phrase, "import")) {
+        const std::string import_path = phrase->tokens.size() > 1 && phrase->tokens[1]
+            ? unquoteImportPath(phrase->tokens[1]->value)
+            : "";
+        parsed_phrase = std::make_shared<ParsedImportStatement>(import_path, detectImportKind(import_path), phrase);
     } else if (isVariableDeclarationPhrase(phrase)) {
         const size_t equal_index = findAssignmentOperatorIndex(phrase->tokens);
         const bool is_mutable = phrase->tokens[0] && phrase->tokens[0]->value == "mutable";

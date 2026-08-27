@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <unordered_set>
 
 #include "lexer/lexer.cpp"
 #include "parser/preparser.cpp"
@@ -13,6 +14,73 @@
 #include "debug/print.cpp"
 #include "io/file.cpp"
 
+static ParsedPhrases parseCPrimeFileWithImports(
+    const std::string& filename,
+    bool debug,
+    std::unordered_set<std::string>& importing
+) {
+    if (importing.find(filename) != importing.end()) {
+        return {};
+    }
+
+    if (!fileExists(filename)) {
+        throw std::runtime_error("Error: File " + filename + " does not exist.");
+    }
+
+    importing.insert(filename);
+
+    Tokens tokens = lexFile(filename);
+
+    if (debug) {
+        std::cout << "Found " << tokens.size() << " tokens in " << filename << ":\n";
+        printTokens(tokens);
+    }
+
+    Phrases phrases = preparseTokens(tokens);
+
+    if (debug) {
+        std::cout << "Found " << phrases.size() << " phrases in " << filename << ":\n";
+        printPhrases(phrases);
+    }
+
+    ParsedPhrases parsed_phrases = parsePhrases(phrases);
+    ParsedPhrases expanded{};
+
+    for (const auto& parsed_phrase : parsed_phrases) {
+        auto import_phrase = std::dynamic_pointer_cast<ParsedImportStatement>(parsed_phrase);
+        if (!import_phrase) {
+            expanded.push_back(parsed_phrase);
+            continue;
+        }
+
+        if (import_phrase->path.empty()) {
+            throw std::runtime_error("Import error: import path cannot be empty in " + filename);
+        }
+
+        const std::string resolved_path = resolvePathRelativeToFile(filename, import_phrase->path);
+        if (!fileExists(resolved_path)) {
+            throw std::runtime_error("Import error: File " + resolved_path + " does not exist.");
+        }
+
+        if (import_phrase->import_kind == ParsedImportKind::CPrime) {
+            ParsedPhrases imported_phrases = parseCPrimeFileWithImports(resolved_path, debug, importing);
+            expanded.insert(expanded.end(), imported_phrases.begin(), imported_phrases.end());
+            continue;
+        }
+
+        import_phrase->path = includePathForGeneratedCpp(resolved_path);
+        expanded.push_back(import_phrase);
+    }
+
+    importing.erase(filename);
+    return expanded;
+}
+
+static ParsedPhrases parseCPrimeFileWithImports(const std::string& filename, bool debug) {
+    std::unordered_set<std::string> importing{};
+    return parseCPrimeFileWithImports(filename, debug, importing);
+}
+
 static int runCompiler(const CliOptions& options) {
     const std::string& filename = options.filename;
     std::cout << "C-Prime Compiler\n";
@@ -22,20 +90,8 @@ static int runCompiler(const CliOptions& options) {
         return EXIT_FAILURE;
     }
 
-    Tokens tokens = lexFile(filename);
-
-    if (options.debug) {
-        printTokens(tokens);
-    }
-
-    Phrases phrases = preparseTokens(tokens);
-
-    if (options.debug) {
-        printPhrases(phrases);
-    }
-
     try {
-        ParsedPhrases parsed_phrases = parsePhrases(phrases);
+        ParsedPhrases parsed_phrases = parseCPrimeFileWithImports(filename, options.debug);
         if (options.debug) {
             printParsedPhrases(parsed_phrases);
         }
