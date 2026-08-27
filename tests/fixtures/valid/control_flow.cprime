@@ -1,0 +1,18 @@
+function main() {
+    mutable primitive uint32 counter = 0;
+
+    while (counter < 4) {
+        counter += 1;
+        if (counter == 2) {
+            continue;
+        }
+        println(counter);
+        if (counter == 3) {
+            break;
+        }
+    }
+
+    for (mutable primitive uint32 index = 0; index < 2; index += 1) {
+        println(index);
+    }
+}

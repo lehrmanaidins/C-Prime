@@ -1,0 +1,3 @@
+function main() {
+    primitive uint32 value;
+}

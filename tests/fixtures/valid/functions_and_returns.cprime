@@ -1,0 +1,11 @@
+type Distance : primitive uint32;
+
+function next_distance(Distance value) -> Distance {
+    return value + 1;
+}
+
+function main() {
+    Distance current = 41;
+    Distance next = next_distance(current);
+    println(next);
+}
