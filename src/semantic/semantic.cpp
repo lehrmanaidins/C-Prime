@@ -12,6 +12,7 @@
 
 #include "../parser/parsed_phrase.cpp"
 #include "../parser/phrases/assignment.cpp"
+#include "../parser/phrases/control_flow.cpp"
 #include "../parser/phrases/enum_definition.cpp"
 #include "../parser/phrases/enum_value_definition.cpp"
 #include "../parser/phrases/function.cpp"
@@ -22,40 +23,26 @@
 #include "../parser/phrases/struct_definition.cpp"
 #include "../parser/phrases/type_definition.cpp"
 #include "../parser/phrases/variable_declaration.cpp"
-
-struct SourceLocation {
-    size_t line;
-    size_t column;
-};
-
-enum class SemanticExpressionKind {
-    Identifier,
-    Literal,
-    Binary,
-    Call,
-    TupleLiteral,
-    InitializerList,
-    Raw
-};
-
-struct SemanticExpressionIR {
-    SemanticExpressionKind kind = SemanticExpressionKind::Raw;
-    std::string text;
-    std::string operator_symbol;
-    std::vector<SemanticExpressionIR> children;
-    SourceLocation location{0, 0};
-};
+#include "expression.cpp"
 
 enum class SemanticTypeKind {
     Named,
-    Tuple
+    Tuple,
+    Reference,
+    Function
 };
 
 struct SemanticTypeRef {
     SemanticTypeKind kind = SemanticTypeKind::Named;
     std::string name;
+    bool is_primitive = false;
+    bool is_const = false;
+    bool is_mutable = false;
     std::vector<SemanticTypeRef> tuple_elements;
     std::vector<std::string> array_dimensions;
+    std::shared_ptr<SemanticTypeRef> reference_target;
+    std::vector<SemanticTypeRef> function_parameters;
+    std::shared_ptr<SemanticTypeRef> function_return_type;
 };
 
 struct SemanticParameterIR {
@@ -127,6 +114,7 @@ enum class SemanticStatementKind {
     If,
     While,
     For,
+    Else,
     Call,
     Return,
     Break,
@@ -158,6 +146,12 @@ struct SemanticForIR {
     SourceLocation location;
 };
 
+struct SemanticElseIR {
+    SemanticExpressionIR condition;
+    std::vector<SemanticStatementRef> body;
+    SourceLocation location;
+};
+
 struct SemanticFunctionIR {
     std::string name;
     SemanticTypeRef return_type;
@@ -173,6 +167,7 @@ struct SemanticFunctionIR {
     std::vector<SemanticIfIR> if_statements;
     std::vector<SemanticWhileIR> while_statements;
     std::vector<SemanticForIR> for_statements;
+    std::vector<SemanticElseIR> else_statements;
     std::vector<SemanticStatementRef> body_order;
 
     SourceLocation location;
@@ -189,6 +184,7 @@ struct SemanticProgram {
     std::vector<SemanticIfIR> if_statements;
     std::vector<SemanticWhileIR> while_statements;
     std::vector<SemanticForIR> for_statements;
+    std::vector<SemanticElseIR> else_statements;
     std::vector<SemanticStatementRef> top_level_order;
 };
 
@@ -220,83 +216,6 @@ struct ValidationContext {
     std::vector<std::unordered_map<std::string, VariableSymbol>> variable_scopes;
     std::string current_function_return_type;
 };
-
-static std::string trim(const std::string& text) {
-    size_t start = 0;
-    while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start]))) {
-        ++start;
-    }
-
-    if (start == text.size()) {
-        return "";
-    }
-
-    size_t end = text.size() - 1;
-    while (end > start && std::isspace(static_cast<unsigned char>(text[end]))) {
-        --end;
-    }
-
-    return text.substr(start, end - start + 1);
-}
-
-static std::vector<std::string> splitTopLevel(const std::string& text, char delimiter) {
-    std::vector<std::string> parts{};
-    std::string current;
-    int paren_depth = 0;
-    int brace_depth = 0;
-    int bracket_depth = 0;
-    char quote = '\0';
-    bool escaped = false;
-
-    for (char ch : text) {
-        if (quote != '\0') {
-            current.push_back(ch);
-            if (ch == '\\' && !escaped) {
-                escaped = true;
-                continue;
-            }
-            if (ch == quote && !escaped) {
-                quote = '\0';
-            }
-            escaped = false;
-            continue;
-        }
-
-        if (ch == '"' || ch == '\'') {
-            quote = ch;
-            current.push_back(ch);
-            continue;
-        }
-
-        if (ch == '(') {
-            ++paren_depth;
-        } else if (ch == ')') {
-            --paren_depth;
-        } else if (ch == '{') {
-            ++brace_depth;
-        } else if (ch == '}') {
-            --brace_depth;
-        } else if (ch == '[') {
-            ++bracket_depth;
-        } else if (ch == ']') {
-            --bracket_depth;
-        }
-
-        if (ch == delimiter && paren_depth == 0 && brace_depth == 0 && bracket_depth == 0) {
-            parts.push_back(trim(current));
-            current.clear();
-            continue;
-        }
-
-        current.push_back(ch);
-    }
-
-    if (!current.empty()) {
-        parts.push_back(trim(current));
-    }
-
-    return parts;
-}
 
 static SourceLocation phraseStartLocation(const std::shared_ptr<ParsedPhrase>& phrase) {
     if (!phrase || !phrase->source_phrase) {
@@ -342,6 +261,16 @@ static std::runtime_error semanticError(const std::shared_ptr<ParsedPhrase>& phr
 
 static std::string normalizeTypeName(const std::string& raw_type) {
     std::string type = trim(raw_type);
+    const std::string const_prefix = "const ";
+    if (type.rfind(const_prefix, 0) == 0) {
+        type = trim(type.substr(const_prefix.size()));
+    }
+
+    const std::string mutable_prefix = "mutable ";
+    if (type.rfind(mutable_prefix, 0) == 0) {
+        type = trim(type.substr(mutable_prefix.size()));
+    }
+
     const std::string primitive_prefix = "primitive ";
     if (type.rfind(primitive_prefix, 0) == 0) {
         type = trim(type.substr(primitive_prefix.size()));
@@ -355,12 +284,44 @@ static std::string normalizeTypeName(const std::string& raw_type) {
     return type;
 }
 
+static bool consumeTypePrefix(std::string& type, const std::string& prefix) {
+    if (type.rfind(prefix, 0) != 0) {
+        return false;
+    }
+
+    type = trim(type.substr(prefix.size()));
+    return true;
+}
+
+static std::string compactTypeSyntax(const std::string& raw_type) {
+    std::string compact;
+    for (char ch : raw_type) {
+        if (std::isspace(static_cast<unsigned char>(ch))) {
+            continue;
+        }
+        compact.push_back(ch);
+    }
+    return compact;
+}
+
 static SemanticTypeRef parseTypeRef(const std::string& raw_type) {
     std::string type = trim(raw_type);
 
-    const std::string primitive_prefix = "primitive ";
-    if (type.rfind(primitive_prefix, 0) == 0) {
-        type = trim(type.substr(primitive_prefix.size()));
+    SemanticTypeRef base_type{};
+
+    bool consumed_prefix = true;
+    while (consumed_prefix) {
+        consumed_prefix = false;
+        if (consumeTypePrefix(type, "const ")) {
+            base_type.is_const = true;
+            consumed_prefix = true;
+        } else if (consumeTypePrefix(type, "mutable ")) {
+            base_type.is_mutable = true;
+            consumed_prefix = true;
+        } else if (consumeTypePrefix(type, "primitive ")) {
+            base_type.is_primitive = true;
+            consumed_prefix = true;
+        }
     }
 
     std::vector<std::string> dimensions{};
@@ -376,392 +337,45 @@ static SemanticTypeRef parseTypeRef(const std::string& raw_type) {
 
     std::reverse(dimensions.begin(), dimensions.end());
 
+    const std::string compact = compactTypeSyntax(type);
+    if (compact.rfind("reference<", 0) == 0 && compact.back() == '>') {
+        const size_t open = type.find('<');
+        const size_t close = type.rfind('>');
+        base_type.kind = SemanticTypeKind::Reference;
+        base_type.name = "reference";
+        base_type.array_dimensions = dimensions;
+        if (open != std::string::npos && close != std::string::npos && close > open) {
+            base_type.reference_target = std::make_shared<SemanticTypeRef>(parseTypeRef(type.substr(open + 1, close - open - 1)));
+        }
+        return base_type;
+    }
+
+    if (type.rfind("function", 0) == 0) {
+        base_type.kind = SemanticTypeKind::Function;
+        base_type.name = "function";
+        base_type.array_dimensions = dimensions;
+        return base_type;
+    }
+
     if (type.size() >= 2 && type.front() == '(' && type.back() == ')') {
-        SemanticTypeRef tuple_type{};
-        tuple_type.kind = SemanticTypeKind::Tuple;
-        tuple_type.name = "tuple";
-        tuple_type.array_dimensions = dimensions;
+        base_type.kind = SemanticTypeKind::Tuple;
+        base_type.name = "tuple";
+        base_type.array_dimensions = dimensions;
 
         const std::string inner = trim(type.substr(1, type.size() - 2));
         for (const auto& part : splitTopLevel(inner, ',')) {
             if (!part.empty()) {
-                tuple_type.tuple_elements.push_back(parseTypeRef(part));
+                base_type.tuple_elements.push_back(parseTypeRef(part));
             }
         }
 
-        return tuple_type;
+        return base_type;
     }
 
-    SemanticTypeRef named_type{};
-    named_type.kind = SemanticTypeKind::Named;
-    named_type.name = type;
-    named_type.array_dimensions = dimensions;
-    return named_type;
-}
-
-static bool isIntegerLiteral(const std::string& text) {
-    if (text.empty()) {
-        return false;
-    }
-
-    for (char ch : text) {
-        if (!std::isdigit(static_cast<unsigned char>(ch))) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool isFloatLiteral(const std::string& text) {
-    bool saw_dot = false;
-    bool saw_digit = false;
-
-    if (text.empty()) {
-        return false;
-    }
-
-    for (char ch : text) {
-        if (std::isdigit(static_cast<unsigned char>(ch))) {
-            saw_digit = true;
-            continue;
-        }
-
-        if (ch == '.' && !saw_dot) {
-            saw_dot = true;
-            continue;
-        }
-
-        return false;
-    }
-
-    return saw_dot && saw_digit;
-}
-
-static std::optional<std::string> inferLiteralTypeName(const std::string& text) {
-    const std::string literal = trim(text);
-    if (literal == "true" || literal == "false") {
-        return std::optional<std::string>{"bool"};
-    }
-
-    if (literal.size() >= 3 && literal.front() == '\'' && literal.back() == '\'') {
-        return std::optional<std::string>{"char8"};
-    }
-
-    if (literal.size() >= 2 && literal.front() == '"' && literal.back() == '"') {
-        return std::optional<std::string>{"char8"};
-    }
-
-    if (isIntegerLiteral(literal)) {
-        return std::optional<std::string>{"int32"};
-    }
-
-    if (isFloatLiteral(literal)) {
-        return std::optional<std::string>{"float64"};
-    }
-
-    return std::nullopt;
-}
-
-static bool isIdentifierText(const std::string& text) {
-    if (text.empty()) {
-        return false;
-    }
-
-    for (char ch : text) {
-        if (!std::isalnum(static_cast<unsigned char>(ch)) && ch != '_') {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool isWrappedByMatchingParens(const std::string& expression) {
-    if (expression.size() < 2 || expression.front() != '(' || expression.back() != ')') {
-        return false;
-    }
-
-    int paren_depth = 0;
-    int brace_depth = 0;
-    int bracket_depth = 0;
-    char quote = '\0';
-    bool escaped = false;
-
-    for (size_t i = 0; i < expression.size(); ++i) {
-        const char ch = expression[i];
-        if (quote != '\0') {
-            if (ch == '\\' && !escaped) {
-                escaped = true;
-                continue;
-            }
-            if (ch == quote && !escaped) {
-                quote = '\0';
-            }
-            escaped = false;
-            continue;
-        }
-
-        if (ch == '"' || ch == '\'') {
-            quote = ch;
-            continue;
-        }
-
-        if (ch == '(') {
-            ++paren_depth;
-        } else if (ch == ')') {
-            --paren_depth;
-            if (paren_depth == 0 && i + 1 < expression.size()) {
-                return false;
-            }
-        } else if (ch == '{') {
-            ++brace_depth;
-        } else if (ch == '}') {
-            --brace_depth;
-        } else if (ch == '[') {
-            ++bracket_depth;
-        } else if (ch == ']') {
-            --bracket_depth;
-        }
-
-        if (paren_depth < 0 || brace_depth < 0 || bracket_depth < 0) {
-            return false;
-        }
-    }
-
-    return paren_depth == 0 && brace_depth == 0 && bracket_depth == 0 && quote == '\0';
-}
-
-static bool hasTopLevelDelimiter(const std::string& text, char delimiter) {
-    return splitTopLevel(text, delimiter).size() > 1;
-}
-
-static bool isUnaryOperatorPosition(const std::string& expression, size_t pos) {
-    if (pos == 0) {
-        return true;
-    }
-
-    size_t prev = pos;
-    while (prev > 0) {
-        --prev;
-        if (!std::isspace(static_cast<unsigned char>(expression[prev]))) {
-            break;
-        }
-    }
-
-    const char ch = expression[prev];
-    return ch == '(' || ch == '[' || ch == '{' || ch == ',' || ch == '='
-        || ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%'
-        || ch == '!' || ch == '<' || ch == '>' || ch == '&' || ch == '|';
-}
-
-static std::optional<size_t> findTopLevelOperator(const std::string& expression, const std::vector<std::string>& operators) {
-    int paren_depth = 0;
-    int brace_depth = 0;
-    int bracket_depth = 0;
-    char quote = '\0';
-    bool escaped = false;
-    std::optional<size_t> found{};
-
-    for (size_t i = 0; i < expression.size(); ++i) {
-        const char ch = expression[i];
-        if (quote != '\0') {
-            if (ch == '\\' && !escaped) {
-                escaped = true;
-                continue;
-            }
-            if (ch == quote && !escaped) {
-                quote = '\0';
-            }
-            escaped = false;
-            continue;
-        }
-
-        if (ch == '"' || ch == '\'') {
-            quote = ch;
-            continue;
-        }
-
-        if (ch == '(') {
-            ++paren_depth;
-            continue;
-        }
-        if (ch == ')') {
-            if (paren_depth > 0) --paren_depth;
-            continue;
-        }
-        if (ch == '{') {
-            ++brace_depth;
-            continue;
-        }
-        if (ch == '}') {
-            if (brace_depth > 0) --brace_depth;
-            continue;
-        }
-        if (ch == '[') {
-            ++bracket_depth;
-            continue;
-        }
-        if (ch == ']') {
-            if (bracket_depth > 0) --bracket_depth;
-            continue;
-        }
-
-        if (paren_depth != 0 || brace_depth != 0 || bracket_depth != 0) {
-            continue;
-        }
-
-        for (const auto& op : operators) {
-            if (expression.compare(i, op.size(), op) != 0) {
-                continue;
-            }
-
-            if ((op == "+" || op == "-") && isUnaryOperatorPosition(expression, i)) {
-                continue;
-            }
-
-            found = i;
-        }
-    }
-
-    return found;
-}
-
-static std::string findOperatorAt(const std::string& expression, size_t pos, const std::vector<std::string>& operators) {
-    for (const auto& op : operators) {
-        if (expression.compare(pos, op.size(), op) == 0) {
-            return op;
-        }
-    }
-
-    return "";
-}
-
-static std::optional<size_t> findCallOpenParen(const std::string& expression) {
-    char quote = '\0';
-    bool escaped = false;
-    for (size_t i = 0; i < expression.size(); ++i) {
-        const char ch = expression[i];
-        if (quote != '\0') {
-            if (ch == '\\' && !escaped) {
-                escaped = true;
-                continue;
-            }
-            if (ch == quote && !escaped) {
-                quote = '\0';
-            }
-            escaped = false;
-            continue;
-        }
-
-        if (ch == '"' || ch == '\'') {
-            quote = ch;
-            continue;
-        }
-
-        if (ch == '(') {
-            return i;
-        }
-    }
-
-    return std::nullopt;
-}
-
-static SemanticExpressionIR parseExpressionIR(const std::string& raw_expression, SourceLocation location) {
-    const std::string expression = trim(raw_expression);
-
-    SemanticExpressionIR expr{};
-    expr.text = expression;
-    expr.location = location;
-
-    if (expression.empty()) {
-        return expr;
-    }
-
-    for (const std::string op : {"+=", "-=", "*=", "/=", "%=", "**=", "&=", "|=", "^=", "~=", "<<=", ">>="}) {
-        if (expression.find(op) != std::string::npos) {
-            expr.kind = SemanticExpressionKind::Raw;
-            return expr;
-        }
-    }
-
-    if (inferLiteralTypeName(expression).has_value()) {
-        expr.kind = SemanticExpressionKind::Literal;
-        return expr;
-    }
-
-    if (isWrappedByMatchingParens(expression)) {
-        const std::string inner = trim(expression.substr(1, expression.size() - 2));
-        if (!hasTopLevelDelimiter(inner, ',')) {
-            return parseExpressionIR(inner, location);
-        }
-    }
-
-    if (expression.front() == '{' && expression.back() == '}') {
-        expr.kind = SemanticExpressionKind::InitializerList;
-        const std::string inner = trim(expression.substr(1, expression.size() - 2));
-        for (const auto& part : splitTopLevel(inner, ',')) {
-            expr.children.push_back(parseExpressionIR(part, location));
-        }
-        return expr;
-    }
-
-    if (expression.front() == '(' && expression.back() == ')' && hasTopLevelDelimiter(expression.substr(1, expression.size() - 2), ',')) {
-        expr.kind = SemanticExpressionKind::TupleLiteral;
-        const std::string inner = trim(expression.substr(1, expression.size() - 2));
-        for (const auto& part : splitTopLevel(inner, ',')) {
-            expr.children.push_back(parseExpressionIR(part, location));
-        }
-        return expr;
-    }
-
-    const std::vector<std::vector<std::string>> precedence_groups = {
-        {"||"},
-        {"&&"},
-        {"==", "!="},
-        {">=", "<=", ">", "<"},
-        {"+", "-"},
-        {"*", "/", "%"}
-    };
-
-    for (const auto& operators : precedence_groups) {
-        const std::optional<size_t> pos = findTopLevelOperator(expression, operators);
-        if (pos.has_value()) {
-            const std::string op = findOperatorAt(expression, pos.value(), operators);
-            expr.kind = SemanticExpressionKind::Binary;
-            expr.operator_symbol = op;
-            expr.children.push_back(parseExpressionIR(expression.substr(0, pos.value()), location));
-            expr.children.push_back(parseExpressionIR(expression.substr(pos.value() + op.size()), location));
-            return expr;
-        }
-    }
-
-    const std::optional<size_t> open_paren = findCallOpenParen(expression);
-    if (open_paren.has_value() && expression.back() == ')' && open_paren.value() > 0) {
-        const std::string callee = trim(expression.substr(0, open_paren.value()));
-        if (!isIdentifierText(callee)) {
-            expr.kind = SemanticExpressionKind::Raw;
-            return expr;
-        }
-
-        expr.kind = SemanticExpressionKind::Call;
-        expr.operator_symbol = callee;
-        const std::string args = trim(expression.substr(open_paren.value() + 1, expression.size() - open_paren.value() - 2));
-        for (const auto& part : splitTopLevel(args, ',')) {
-            if (!part.empty()) {
-                expr.children.push_back(parseExpressionIR(part, location));
-            }
-        }
-        return expr;
-    }
-
-    if (isIdentifierText(expression)) {
-        expr.kind = SemanticExpressionKind::Identifier;
-        return expr;
-    }
-
-    expr.kind = SemanticExpressionKind::Raw;
-    return expr;
+    base_type.kind = SemanticTypeKind::Named;
+    base_type.name = type;
+    base_type.array_dimensions = dimensions;
+    return base_type;
 }
 
 static bool isKnownType(const SemanticSymbolTable& symbols, const std::string& raw_type) {
@@ -1047,24 +661,6 @@ static void validateAssignmentCompatibility(
     }
 }
 
-static bool isControlFlowUnknown(const std::shared_ptr<ParsedPhrase>& phrase, const std::string& keyword) {
-    if (!phrase || phrase->kind != ParsedPhraseKind::Unknown || !phrase->source_phrase || phrase->source_phrase->tokens.empty()) {
-        return false;
-    }
-
-    return phrase->source_phrase->tokens.front() && phrase->source_phrase->tokens.front()->value == keyword;
-}
-
-static std::string extractParenthesizedSegment(const std::string& text) {
-    const size_t open = text.find('(');
-    const size_t close = text.rfind(')');
-    if (open == std::string::npos || close == std::string::npos || close <= open) {
-        return "";
-    }
-
-    return trim(text.substr(open + 1, close - open - 1));
-}
-
 static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, ValidationContext& context);
 
 static void analyzeControlFlowBody(const std::shared_ptr<ParsedPhrase>& phrase, ValidationContext& context) {
@@ -1299,15 +895,7 @@ static void analyzeReturnStatement(
     validateAssignmentCompatibility(return_phrase, expected_type, expression, context);
 }
 
-static void analyzeUnknown(
-    const std::shared_ptr<ParsedPhrase>& phrase,
-    ValidationContext& context
-) {
-    if (isControlFlowUnknown(phrase, "if") || isControlFlowUnknown(phrase, "while") || isControlFlowUnknown(phrase, "for") || isControlFlowUnknown(phrase, "else")) {
-        analyzeControlFlowBody(phrase, context);
-        return;
-    }
-
+static void analyzeUnknown(const std::shared_ptr<ParsedPhrase>& phrase) {
     throw semanticError(phrase, "unsupported phrase for analysis: " + phrase->label() + " -> " + joinPhraseText(phrase));
 }
 
@@ -1347,8 +935,14 @@ static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, Validatio
         case ParsedPhraseKind::BreakStatement:
         case ParsedPhraseKind::ContinueStatement:
             break;
+        case ParsedPhraseKind::IfStatement:
+        case ParsedPhraseKind::WhileStatement:
+        case ParsedPhraseKind::ForStatement:
+        case ParsedPhraseKind::ElseStatement:
+            analyzeControlFlowBody(phrase, context);
+            break;
         case ParsedPhraseKind::Unknown:
-            analyzeUnknown(phrase, context);
+            analyzeUnknown(phrase);
             break;
         case ParsedPhraseKind::ParameterDefinition:
         case ParsedPhraseKind::EnumValueDefinition:
@@ -1483,6 +1077,7 @@ static void lowerBodyPhrases(
     std::vector<SemanticIfIR>& if_statements,
     std::vector<SemanticWhileIR>& while_statements,
     std::vector<SemanticForIR>& for_statements,
+    std::vector<SemanticElseIR>& else_statements,
     std::vector<SemanticStatementRef>& order
 );
 
@@ -1498,6 +1093,7 @@ static void lowerBodyPhrases(
     std::vector<SemanticIfIR>& if_statements,
     std::vector<SemanticWhileIR>& while_statements,
     std::vector<SemanticForIR>& for_statements,
+    std::vector<SemanticElseIR>& else_statements,
     std::vector<SemanticStatementRef>& order
 ) {
     for (const auto& phrase : phrases) {
@@ -1571,10 +1167,10 @@ static void lowerBodyPhrases(
             case ParsedPhraseKind::ContinueStatement:
                 order.push_back({SemanticStatementKind::Continue, 0});
                 break;
-            case ParsedPhraseKind::Unknown:
-                if (isControlFlowUnknown(phrase, "if")) {
+            case ParsedPhraseKind::IfStatement: {
+                    auto if_phrase = std::dynamic_pointer_cast<ParsedIfStatement>(phrase);
                     SemanticIfIR node{};
-                    node.condition = parseExpressionIR(extractParenthesizedSegment(joinPhraseText(phrase)), phraseStartLocation(phrase));
+                    node.condition = parseExpressionIR(if_phrase ? if_phrase->condition : "", phraseStartLocation(phrase));
                     node.location = phraseStartLocation(phrase);
                     lowerBodyPhrases(
                         phrase->nested_phrases,
@@ -1588,13 +1184,17 @@ static void lowerBodyPhrases(
                         if_statements,
                         while_statements,
                         for_statements,
+                        else_statements,
                         node.body
                     );
                     if_statements.push_back(node);
                     order.push_back({SemanticStatementKind::If, if_statements.size() - 1});
-                } else if (isControlFlowUnknown(phrase, "while")) {
+                break;
+            }
+            case ParsedPhraseKind::WhileStatement: {
+                    auto while_phrase = std::dynamic_pointer_cast<ParsedWhileStatement>(phrase);
                     SemanticWhileIR node{};
-                    node.condition = parseExpressionIR(extractParenthesizedSegment(joinPhraseText(phrase)), phraseStartLocation(phrase));
+                    node.condition = parseExpressionIR(while_phrase ? while_phrase->condition : "", phraseStartLocation(phrase));
                     node.location = phraseStartLocation(phrase);
                     lowerBodyPhrases(
                         phrase->nested_phrases,
@@ -1608,22 +1208,19 @@ static void lowerBodyPhrases(
                         if_statements,
                         while_statements,
                         for_statements,
+                        else_statements,
                         node.body
                     );
                     while_statements.push_back(node);
                     order.push_back({SemanticStatementKind::While, while_statements.size() - 1});
-                } else if (isControlFlowUnknown(phrase, "for")) {
+                break;
+            }
+            case ParsedPhraseKind::ForStatement: {
+                    auto for_phrase = std::dynamic_pointer_cast<ParsedForStatement>(phrase);
                     SemanticForIR node{};
-                    const auto parts = splitTopLevel(extractParenthesizedSegment(joinPhraseText(phrase)), ';');
-                    if (!parts.empty()) {
-                        node.initializer = parseExpressionIR(parts[0], phraseStartLocation(phrase));
-                    }
-                    if (parts.size() > 1) {
-                        node.condition = parseExpressionIR(parts[1], phraseStartLocation(phrase));
-                    }
-                    if (parts.size() > 2) {
-                        node.update = parseExpressionIR(parts[2], phraseStartLocation(phrase));
-                    }
+                    node.initializer = parseExpressionIR(for_phrase ? for_phrase->initializer : "", phraseStartLocation(phrase));
+                    node.condition = parseExpressionIR(for_phrase ? for_phrase->condition : "", phraseStartLocation(phrase));
+                    node.update = parseExpressionIR(for_phrase ? for_phrase->update : "", phraseStartLocation(phrase));
                     node.location = phraseStartLocation(phrase);
                     lowerBodyPhrases(
                         phrase->nested_phrases,
@@ -1637,12 +1234,37 @@ static void lowerBodyPhrases(
                         if_statements,
                         while_statements,
                         for_statements,
+                        else_statements,
                         node.body
                     );
                     for_statements.push_back(node);
                     order.push_back({SemanticStatementKind::For, for_statements.size() - 1});
-                }
                 break;
+            }
+            case ParsedPhraseKind::ElseStatement: {
+                    auto else_phrase = std::dynamic_pointer_cast<ParsedElseStatement>(phrase);
+                    SemanticElseIR node{};
+                    node.condition = parseExpressionIR(else_phrase ? else_phrase->condition : "", phraseStartLocation(phrase));
+                    node.location = phraseStartLocation(phrase);
+                    lowerBodyPhrases(
+                        phrase->nested_phrases,
+                        variable_declarations,
+                        assignments,
+                        type_definitions,
+                        struct_definitions,
+                        enum_definitions,
+                        calls,
+                        returns,
+                        if_statements,
+                        while_statements,
+                        for_statements,
+                        else_statements,
+                        node.body
+                    );
+                    else_statements.push_back(node);
+                    order.push_back({SemanticStatementKind::Else, else_statements.size() - 1});
+                break;
+            }
             default:
                 break;
         }
@@ -1686,6 +1308,7 @@ static SemanticFunctionIR lowerFunction(const std::shared_ptr<ParsedFunction>& p
         function_ir.if_statements,
         function_ir.while_statements,
         function_ir.for_statements,
+        function_ir.else_statements,
         function_ir.body_order
     );
 

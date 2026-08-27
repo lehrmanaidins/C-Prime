@@ -1,0 +1,7 @@
+function value() -> primitive uint32 {
+    return;
+}
+
+function main() {
+    println("unused");
+}

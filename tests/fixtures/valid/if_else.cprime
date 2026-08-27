@@ -1,0 +1,11 @@
+function main() {
+    primitive uint8 value = 0;
+
+    if (value == 0) {
+        println("value is 0");
+    } else if (value == 1) {
+        println("value is 1");
+    } else {
+        println("value is something else");
+    }
+}

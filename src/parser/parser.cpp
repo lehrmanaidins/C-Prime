@@ -7,6 +7,7 @@
 #include "preparser.cpp"
 #include "parsed_phrase.cpp"
 #include "phrases/assignment.cpp"
+#include "phrases/control_flow.cpp"
 #include "phrases/enum_definition.cpp"
 #include "phrases/enum_value_definition.cpp"
 #include "phrases/function.cpp"
@@ -281,6 +282,10 @@ static bool isContinuePhrase(const std::shared_ptr<Phrase>& phrase) {
     return phrase && phrase->tokens.size() == 1 && phrase->tokens[0] && phrase->tokens[0]->value == "continue";
 }
 
+static bool isKeywordPhrase(const std::shared_ptr<Phrase>& phrase, const std::string& keyword) {
+    return phrase && !phrase->tokens.empty() && phrase->tokens[0] && phrase->tokens[0]->value == keyword;
+}
+
 static bool isAssignmentPhrase(const std::shared_ptr<Phrase>& phrase) {
     if (!phrase || phrase->tokens.size() < 3) {
         return false;
@@ -519,6 +524,84 @@ static std::string parseFunctionReturnType(const Tokens& tokens, size_t close_pa
     return joinTokenRange(tokens, close_paren + 2, tokens.size());
 }
 
+static std::string parseParenthesizedContent(const Tokens& tokens) {
+    size_t open_paren = tokens.size();
+    size_t close_paren = tokens.size();
+    if (!findParentheses(tokens, open_paren, close_paren)) {
+        return "";
+    }
+
+    return joinTokenRange(tokens, open_paren + 1, close_paren);
+}
+
+static std::vector<std::string> splitParserTopLevel(const std::string& text, char delimiter) {
+    std::vector<std::string> parts{};
+    std::string current;
+    int paren_depth = 0;
+    int brace_depth = 0;
+    int bracket_depth = 0;
+    char quote = '\0';
+    bool escaped = false;
+
+    for (char ch : text) {
+        if (quote != '\0') {
+            current.push_back(ch);
+            if (ch == '\\' && !escaped) {
+                escaped = true;
+                continue;
+            }
+            if (ch == quote && !escaped) {
+                quote = '\0';
+            }
+            escaped = false;
+            continue;
+        }
+
+        if (ch == '"' || ch == '\'') {
+            quote = ch;
+            current.push_back(ch);
+            continue;
+        }
+
+        if (ch == '(') {
+            ++paren_depth;
+        } else if (ch == ')') {
+            if (paren_depth > 0) --paren_depth;
+        } else if (ch == '{') {
+            ++brace_depth;
+        } else if (ch == '}') {
+            if (brace_depth > 0) --brace_depth;
+        } else if (ch == '[') {
+            ++bracket_depth;
+        } else if (ch == ']') {
+            if (bracket_depth > 0) --bracket_depth;
+        }
+
+        if (ch == delimiter && paren_depth == 0 && brace_depth == 0 && bracket_depth == 0) {
+            parts.push_back(trimParserText(current));
+            current.clear();
+            continue;
+        }
+
+        current.push_back(ch);
+    }
+
+    if (!current.empty()) {
+        parts.push_back(trimParserText(current));
+    }
+
+    return parts;
+}
+
+static ParsedForStatement parseForStatement(const std::shared_ptr<Phrase>& phrase) {
+    const auto parts = splitParserTopLevel(parseParenthesizedContent(phrase->tokens), ';');
+    const std::string initializer = parts.size() > 0 ? parts[0] : "";
+    const std::string condition = parts.size() > 1 ? parts[1] : "";
+    const std::string update = parts.size() > 2 ? parts[2] : "";
+
+    return ParsedForStatement(initializer, condition, update, phrase);
+}
+
 std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase, ParsedPhraseKind parent_kind = ParsedPhraseKind::Unknown) {
     if (!phrase) {
         return std::make_shared<ParsedPhrase>();
@@ -555,6 +638,15 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
     } else if (isEnumDefinitionPhrase(phrase)) {
         const std::string enum_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
         parsed_phrase = std::make_shared<ParsedEnumDefinition>(enum_name, phrase);
+    } else if (isKeywordPhrase(phrase, "if")) {
+        parsed_phrase = std::make_shared<ParsedIfStatement>(parseParenthesizedContent(phrase->tokens), phrase);
+    } else if (isKeywordPhrase(phrase, "while")) {
+        parsed_phrase = std::make_shared<ParsedWhileStatement>(parseParenthesizedContent(phrase->tokens), phrase);
+    } else if (isKeywordPhrase(phrase, "for")) {
+        parsed_phrase = std::make_shared<ParsedForStatement>(parseForStatement(phrase));
+    } else if (isKeywordPhrase(phrase, "else")) {
+        const bool is_else_if = phrase->tokens.size() > 1 && phrase->tokens[1] && phrase->tokens[1]->value == "if";
+        parsed_phrase = std::make_shared<ParsedElseStatement>(is_else_if ? parseParenthesizedContent(phrase->tokens) : "", phrase);
     } else if (isVariableDeclarationPhrase(phrase)) {
         const size_t equal_index = findAssignmentOperatorIndex(phrase->tokens);
         const bool is_mutable = phrase->tokens[0] && phrase->tokens[0]->value == "mutable";

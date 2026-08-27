@@ -115,6 +115,10 @@ static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& cont
             base += emitTypeRef(resolved_type.tuple_elements[i], context);
         }
         base += ">";
+    } else if (resolved_type.kind == SemanticTypeKind::Reference && resolved_type.reference_target) {
+        base = emitTypeRef(*resolved_type.reference_target, context) + "&";
+    } else if (resolved_type.kind == SemanticTypeKind::Function) {
+        base = "auto";
     } else {
         base = mapPrimitiveType(resolved_type.name, context);
     }
@@ -198,6 +202,7 @@ static void emitStatementRef(
     const std::vector<SemanticIfIR>& ifs,
     const std::vector<SemanticWhileIR>& whiles,
     const std::vector<SemanticForIR>& fors,
+    const std::vector<SemanticElseIR>& elses,
     size_t indent
 );
 
@@ -315,10 +320,11 @@ static void emitStatementList(
     const std::vector<SemanticIfIR>& ifs,
     const std::vector<SemanticWhileIR>& whiles,
     const std::vector<SemanticForIR>& fors,
+    const std::vector<SemanticElseIR>& elses,
     size_t indent_depth
 ) {
     for (const auto& ref : order) {
-        emitStatementRef(output, context, ref, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, indent_depth);
+        emitStatementRef(output, context, ref, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth);
     }
 }
 
@@ -336,6 +342,7 @@ static void emitStatementRef(
     const std::vector<SemanticIfIR>& ifs,
     const std::vector<SemanticWhileIR>& whiles,
     const std::vector<SemanticForIR>& fors,
+    const std::vector<SemanticElseIR>& elses,
     size_t indent_depth
 ) {
     const std::string i = indent(indent_depth);
@@ -427,7 +434,19 @@ static void emitStatementRef(
             const auto& node = ifs[ref.index];
             context.pushLine(node.location, "if");
             appendLine(output, context, i + "if (" + emitExpression(node.condition, context) + ") {");
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, indent_depth + 1);
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
+            appendLine(output, context, i + "}");
+            break;
+        }
+        case SemanticStatementKind::Else: {
+            const auto& node = elses[ref.index];
+            context.pushLine(node.location, "else");
+            if (node.condition.text.empty()) {
+                appendLine(output, context, i + "else {");
+            } else {
+                appendLine(output, context, i + "else if (" + emitExpression(node.condition, context) + ") {");
+            }
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
@@ -435,7 +454,7 @@ static void emitStatementRef(
             const auto& node = whiles[ref.index];
             context.pushLine(node.location, "while");
             appendLine(output, context, i + "while (" + emitExpression(node.condition, context) + ") {");
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, indent_depth + 1);
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
@@ -443,7 +462,7 @@ static void emitStatementRef(
             const auto& node = fors[ref.index];
             context.pushLine(node.location, "for");
             appendLine(output, context, i + "for (" + emitForClauseExpression(node.initializer, context) + "; " + emitForClauseExpression(node.condition, context) + "; " + emitForClauseExpression(node.update, context) + ") {");
-            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, indent_depth + 1);
+            emitStatementList(output, context, node.body, vars, assigns, types, structs, enums, calls, returns, ifs, whiles, fors, elses, indent_depth + 1);
             appendLine(output, context, i + "}");
             break;
         }
@@ -472,6 +491,7 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
             program.if_statements,
             program.while_statements,
             program.for_statements,
+            program.else_statements,
             0
         );
     }
@@ -503,6 +523,7 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
             function.if_statements,
             function.while_statements,
             function.for_statements,
+            function.else_statements,
             1
         );
         if (is_main) {

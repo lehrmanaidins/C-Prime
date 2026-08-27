@@ -20,7 +20,11 @@ enum class ParsedPhraseKind {
     CallStatement,
     ReturnStatement,
     BreakStatement,
-    ContinueStatement
+    ContinueStatement,
+    IfStatement,
+    WhileStatement,
+    ForStatement,
+    ElseStatement
 };
 
 struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
@@ -74,6 +78,14 @@ struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
                 return "BreakStatement";
             case ParsedPhraseKind::ContinueStatement:
                 return "ContinueStatement";
+            case ParsedPhraseKind::IfStatement:
+                return "IfStatement";
+            case ParsedPhraseKind::WhileStatement:
+                return "WhileStatement";
+            case ParsedPhraseKind::ForStatement:
+                return "ForStatement";
+            case ParsedPhraseKind::ElseStatement:
+                return "ElseStatement";
             case ParsedPhraseKind::Unknown:
             default:
                 return "Unknown";
