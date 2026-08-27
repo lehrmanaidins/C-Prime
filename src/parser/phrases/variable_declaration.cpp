@@ -10,16 +10,19 @@ struct ParsedVariableDeclaration : ParsedPhrase {
         const std::string& name,
         const std::string& initializer,
         bool is_mutable,
+        bool is_unsafe,
         const std::shared_ptr<Phrase>& source_phrase = nullptr
     ) : ParsedPhrase(ParsedPhraseKind::VariableDeclaration, source_phrase),
         type_name(type_name),
         name(name),
         initializer(initializer),
-        is_mutable(is_mutable) {
+        is_mutable(is_mutable),
+        is_unsafe(is_unsafe) {
     }
 
     std::string type_name;
     std::string name;
     std::string initializer;
     bool is_mutable;
+    bool is_unsafe;
 };

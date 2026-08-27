@@ -26,7 +26,8 @@ enum class ParsedPhraseKind {
     WhileStatement,
     ForStatement,
     ElseStatement,
-    ImportStatement
+    ImportStatement,
+    UnsafeBlock
 };
 
 struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
@@ -92,6 +93,8 @@ struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
                 return "ElseStatement";
             case ParsedPhraseKind::ImportStatement:
                 return "ImportStatement";
+            case ParsedPhraseKind::UnsafeBlock:
+                return "UnsafeBlock";
             case ParsedPhraseKind::Unknown:
             default:
                 return "Unknown";

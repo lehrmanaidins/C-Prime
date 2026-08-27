@@ -9,6 +9,14 @@ static void emitVariableDeclarationStatement(
     const std::string& indent_str
 ) {
     context.pushLine(var.location, "var");
-    const std::string qualifier = var.is_mutable ? "" : "const ";
-    appendLine(output, context, indent_str + qualifier + emitTypeRef(var.type, context) + " " + sanitizeIdentifier(var.name) + " = " + emitVariableInitializer(var, context) + ";");
+    const std::string type_str = emitTypeRef(var.type, context);
+    std::string declarator;
+    if (var.type.kind == SemanticTypeKind::Pointer) {
+        // Immutability governs the pointer itself, so 'const' is postfixed rather than prefixed.
+        declarator = type_str + (var.is_mutable ? "" : " const") + " " + sanitizeIdentifier(var.name);
+    } else {
+        const std::string qualifier = var.is_mutable ? "" : "const ";
+        declarator = qualifier + type_str + " " + sanitizeIdentifier(var.name);
+    }
+    appendLine(output, context, indent_str + declarator + " = " + emitVariableInitializer(var, context) + ";");
 }

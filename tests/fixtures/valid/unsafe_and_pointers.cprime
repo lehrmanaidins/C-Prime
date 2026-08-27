@@ -1,0 +1,20 @@
+unsafe function store(pointer<primitive uint32> tracked) -> primitive uint32 {
+    unsafe {
+        pointer<primitive uint32> alias = tracked;
+    }
+    return 0;
+}
+
+function main() {
+    mutable primitive uint32 value = 42;
+
+    unsafe pointer<primitive uint32> direct = pointer(value);
+
+    unsafe {
+        mutable pointer<primitive uint32> scoped = pointer(value);
+    }
+
+    primitive uint32 result = store(direct);
+    println(result);
+}
+

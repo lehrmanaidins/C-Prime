@@ -422,6 +422,37 @@ reference<primitive uint32> ra = reference(a); // Immutable reference to a mutab
 reference <primitive const uint32> ra = reference(a); // Same as above, `const` is just optionally added.
 ```
 
+#### Pointers
+
+&emsp;Pointers in C-Prime are declared with the `pointer` keyword with the pointed-to type inside of angled brackets `< >`. Unlike references, pointers are an unsafe, low-level construct and can only be declared and initialized in an unsafe context.
+
+&emsp;A value is converted to a pointer using the `pointer(value)` function, mirroring how `reference(value)` is used to create a reference, and will return a pointer of type `pointer<T>`, where `T` is the type of the referenced value.
+
+```cprime
+mutable primitive uint32 a = 10;
+unsafe pointer<primitive uint32> p = pointer(a); // OK ('unsafe' marks the declaration itself)
+
+unsafe {
+    mutable pointer<primitive uint32> p2 = pointer(a); // OK (declared inside an `unsafe` block)
+}
+
+pointer<primitive uint32> p3 = pointer(a); // ERROR (pointer types must be declared 'unsafe' or used inside an unsafe block)
+```
+
+&emsp;A function can be marked `unsafe`, which allows pointer types to appear in its parameter list and return type. This does **not** grant its body any special permission; using a pointer type, calling `pointer()`, or performing any other unsafe operation inside the body still requires an explicit `unsafe` keyword (either an `unsafe { }` block or an `unsafe`-prefixed declaration), exactly as in a normal function.
+
+```cprime
+unsafe function store(pointer<primitive uint32> tracked) -> primitive uint32 {
+    pointer<primitive uint32> alias = tracked; // ERROR (the function body is not automatically unsafe)
+
+    unsafe {
+        pointer<primitive uint32> alias = tracked; // OK (explicitly marked unsafe)
+    }
+
+    return 0;
+}
+```
+
 ## Functions
 
 ### Naming Conventions

@@ -10,6 +10,7 @@ union
 
 // Reserved Data Types
 reference
+pointer
 array
 list
 

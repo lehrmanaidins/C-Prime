@@ -52,6 +52,7 @@
     "char32",
     "bool",
     "reference",
+    "pointer",
     "array",
     "list"
   ],

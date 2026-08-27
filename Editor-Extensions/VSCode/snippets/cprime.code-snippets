@@ -1,0 +1,25 @@
+{
+  "Function": {
+    "prefix": "function",
+    "body": [
+      "function ${1:name}(${2})${3: -> ${4:void}} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Declare a C-Prime function"
+  },
+  "Structure": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name} {",
+      "    ${0}",
+      "};"
+    ],
+    "description": "Declare a C-Prime structure"
+  },
+  "Mutable variable": {
+    "prefix": "mutable",
+    "body": "mutable primitive ${1:uint32} ${2:name} = ${3:0};",
+    "description": "Declare a mutable primitive variable"
+  }
+}

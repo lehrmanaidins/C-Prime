@@ -1,7 +1,7 @@
 {
   "name": "c-prime-syntax",
-  "displayName": "C-Prime Syntax Highlighting",
-  "description": "Syntax highlighting for C-Prime files (.cprime and .hprime)",
+  "displayName": "C-Prime Language Support",
+  "description": "Syntax highlighting and editor intelligence for C-Prime files",
   "publisher": "Hydranet",
   "version": "0.1.0",
   "repository": {
@@ -14,8 +14,13 @@
   "categories": [
     "Programming Languages"
   ],
+  "activationEvents": [
+    "onLanguage:cprime"
+  ],
+  "main": "./extension.js",
   "scripts": {
-    "package": "vsce package"
+    "package": "npx @vscode/vsce package",
+    "validate": "node --check extension.js"
   },
   "contributes": {
     "languages": [
@@ -37,6 +42,22 @@
         "language": "cprime",
         "scopeName": "source.cprime",
         "path": "./syntaxes/cprime.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "C-Prime",
+      "properties": {
+        "cprime.enableDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable C-Prime syntax diagnostics."
+        }
+      }
+    },
+    "snippets": [
+      {
+        "language": "cprime",
+        "path": "./snippets/cprime.code-snippets"
       }
     ]
   }

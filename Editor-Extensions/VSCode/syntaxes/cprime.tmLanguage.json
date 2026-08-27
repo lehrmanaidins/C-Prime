@@ -8,6 +8,7 @@
   ],
   "patterns": [
     { "include": "#comments" },
+      { "include": "#attributes" },
     { "include": "#strings" },
     { "include": "#chars" },
     { "include": "#numbers" },
@@ -62,7 +63,7 @@
       "patterns": [
         {
           "name": "keyword.control.cprime",
-          "match": "\\b(?:if|else|switch|case|default|for|foreach|while|do|loop|break|continue|limit|return|requires|ensures|release|debug|unsafe|const|mutable|type|struct|enum|union|function|void|true|false|null|import)\\b"
+          "match": "\\b(?:if|else|switch|case|default|for|foreach|while|do|loop|break|continue|limit|return|requires|ensures|result|old|unsafe|const|mutable|type|alias|struct|enum|union|function|template|void|true|false|null|import|pure|entry|critical|interrupt)\\b"
         }
       ]
     },
@@ -70,7 +71,7 @@
       "patterns": [
         {
           "name": "storage.type.cprime",
-          "match": "\\b(?:primitive|reference|uint8|uint16|uint32|uint64|int8|int16|int32|int64|float32|float64|char8|char16|char32|bool)\\b"
+          "match": "\\b(?:primitive|reference|pointer|array|list|uint8|uint16|uint32|uint64|int8|int16|int32|int64|float16|float32|float64|float128|char8|char16|char32|bool)\\b"
         }
       ]
     },
@@ -78,7 +79,15 @@
       "patterns": [
         {
           "name": "entity.name.function.cprime",
-          "match": "\\b(?:print|println|array_fill|widen_cast|narrow_cast|underlying_cast|reinterpret_cast)\\s*(?=\\()"
+          "match": "(?<=\\bfunction\\s)[A-Za-z_][A-Za-z0-9_]*|\\b(?:print|println|array_fill|widen_cast|narrow_cast|underlying_cast|reinterpret_cast)\\s*(?=\\()"
+        }
+      ]
+    },
+    "attributes": {
+      "patterns": [
+        {
+          "name": "storage.modifier.attribute.cprime",
+          "match": "@[A-Za-z_][A-Za-z0-9_]*"
         }
       ]
     },

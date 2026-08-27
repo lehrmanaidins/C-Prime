@@ -1,0 +1,4 @@
+function main() {
+    primitive uint32 value = 10;
+    pointer<primitive uint32> p = value;
+}

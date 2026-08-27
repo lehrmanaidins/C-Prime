@@ -235,6 +235,8 @@ struct ValidationContext {
     std::unordered_set<std::string> template_type_parameters;
     std::string current_function_return_type;
     size_t loop_depth = 0;
+    size_t unsafe_depth = 0;
+    bool current_function_is_unsafe = false;
 };
 
 #include "cpp_import_symbols.cpp"
@@ -308,6 +310,10 @@ static bool isKnownTypeRef(
         return type_ref.reference_target && isKnownTypeRef(symbols, *type_ref.reference_target, template_type_parameters);
     }
 
+    if (type_ref.kind == SemanticTypeKind::Pointer) {
+        return type_ref.pointer_target && isKnownTypeRef(symbols, *type_ref.pointer_target, template_type_parameters);
+    }
+
     if (type_ref.kind == SemanticTypeKind::Function) {
         if (!type_ref.function_return_type || !isKnownTypeRef(symbols, *type_ref.function_return_type, template_type_parameters)) {
             return false;
@@ -339,6 +345,26 @@ static bool isKnownTypeRefString(
 
 static bool isTypeUnion(const SemanticSymbolTable& symbols, const std::string& raw_type) {
     return symbols.union_members.find(normalizeTypeName(raw_type)) != symbols.union_members.end();
+}
+
+static bool containsPointerType(const SemanticTypeRef& type_ref) {
+    if (type_ref.kind == SemanticTypeKind::Pointer) {
+        return true;
+    }
+
+    if (type_ref.kind == SemanticTypeKind::Reference) {
+        return type_ref.reference_target && containsPointerType(*type_ref.reference_target);
+    }
+
+    if (type_ref.kind == SemanticTypeKind::Tuple) {
+        for (const auto& element : type_ref.tuple_elements) {
+            if (containsPointerType(element)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 static void enterScope(ValidationContext& context) {
@@ -565,6 +591,12 @@ static std::optional<std::string> inferExpressionTypeName(
         case SemanticExpressionKind::InitializerList:
             return std::optional<std::string>{"init_list"};
         case SemanticExpressionKind::Call:
+            if (expression.operator_symbol == "pointer" && expression.children.size() == 1) {
+                const std::optional<std::string> argument_type = inferExpressionTypeName(expression.children.front(), context);
+                return argument_type.has_value()
+                    ? std::optional<std::string>{"pointer<" + argument_type.value() + ">"}
+                    : std::nullopt;
+            }
             if (context.symbols.function_return_types.find(expression.operator_symbol) != context.symbols.function_return_types.end()) {
                 return std::optional<std::string>{context.symbols.function_return_types.at(expression.operator_symbol)};
             }
@@ -706,7 +738,14 @@ static void validateExpression(
     }
 
     if (expression.kind == SemanticExpressionKind::Call) {
-        if (context.symbols.known_functions.find(expression.operator_symbol) == context.symbols.known_functions.end()) {
+        if (expression.operator_symbol == "pointer") {
+            if (context.unsafe_depth == 0) {
+                throw semanticError(phrase, "'pointer()' can only be called inside an unsafe block or unsafe function");
+            }
+            if (expression.children.size() != 1 || !isAssignableExpression(expression.children.front())) {
+                throw semanticError(phrase, "'pointer()' expects a single variable argument");
+            }
+        } else if (context.symbols.known_functions.find(expression.operator_symbol) == context.symbols.known_functions.end()) {
             throw semanticError(phrase, "unknown function '" + expression.operator_symbol + "'");
         } else if (context.symbols.variadic_functions.find(expression.operator_symbol) == context.symbols.variadic_functions.end()) {
             auto arity = context.symbols.function_parameter_counts.find(expression.operator_symbol);
@@ -874,11 +913,14 @@ static void analyzeFunction(
 
     const std::string previous_return_type = context.current_function_return_type;
     context.current_function_return_type = return_type;
+    const bool previous_function_is_unsafe = context.current_function_is_unsafe;
+    context.current_function_is_unsafe = function_phrase->is_unsafe;
     enterScope(context);
 
     analyzePhraseList(function_phrase->nested_phrases, context);
 
     leaveScope(context);
+    context.current_function_is_unsafe = previous_function_is_unsafe;
     context.current_function_return_type = previous_return_type;
     for (const auto& parameter : function_phrase->template_parameters) {
         context.template_type_parameters.erase(parameter.name);
@@ -899,13 +941,25 @@ static void analyzeVariableDeclaration(
         throw semanticError(variable_phrase, "unknown variable type '" + variable_phrase->type_name + "' in phrase: " + joinPhraseText(variable_phrase));
     }
 
+    if (containsPointerType(parseTypeRef(variable_phrase->type_name)) && !variable_phrase->is_unsafe && context.unsafe_depth == 0) {
+        throw semanticError(variable_phrase, "pointer type '" + variable_phrase->type_name + "' must be declared 'unsafe' or used inside an unsafe block/function in phrase: " + joinPhraseText(variable_phrase));
+    }
+
     if (trim(variable_phrase->initializer).empty()) {
         throw semanticError(variable_phrase, "variable must have an initializer in phrase: " + joinPhraseText(variable_phrase));
+    }
+
+    if (variable_phrase->is_unsafe) {
+        ++context.unsafe_depth;
     }
 
     SemanticExpressionIR initializer_expr = parseExpressionIR(variable_phrase->initializer, phraseStartLocation(variable_phrase));
     validateExpression(variable_phrase, initializer_expr, context);
     validateAssignmentCompatibility(variable_phrase, variable_type, initializer_expr, context);
+
+    if (variable_phrase->is_unsafe) {
+        --context.unsafe_depth;
+    }
 
     declareVariable(
         context,
@@ -1061,6 +1115,10 @@ static void analyzeParameterDeclaration(
         throw semanticError(parameter_phrase, "unknown parameter type '" + parameter_phrase->type_name + "' in phrase: " + joinPhraseText(parameter_phrase));
     }
 
+    if (containsPointerType(parseTypeRef(parameter_phrase->type_name)) && !context.current_function_is_unsafe) {
+        throw semanticError(parameter_phrase, "pointer type '" + parameter_phrase->type_name + "' can only be used as a parameter of an 'unsafe function' in phrase: " + joinPhraseText(parameter_phrase));
+    }
+
     declareVariable(
         context,
         parameter_phrase->name,
@@ -1076,6 +1134,10 @@ static void analyzeCallStatement(
 ) {
     if (!call_phrase) {
         return;
+    }
+
+    if (call_phrase->name == "pointer" && context.unsafe_depth == 0) {
+        throw semanticError(call_phrase, "'pointer()' can only be called inside an unsafe block or unsafe function");
     }
 
     if (context.symbols.known_functions.find(call_phrase->name) == context.symbols.known_functions.end()) {
@@ -1189,6 +1251,11 @@ static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, Validatio
         case ParsedPhraseKind::ForStatement:
             analyzeForStatement(std::dynamic_pointer_cast<ParsedForStatement>(phrase), context);
             break;
+        case ParsedPhraseKind::UnsafeBlock:
+            ++context.unsafe_depth;
+            analyzeControlFlowBody(phrase, context);
+            --context.unsafe_depth;
+            break;
         case ParsedPhraseKind::Unknown:
             analyzeUnknown(phrase);
             break;
@@ -1233,6 +1300,9 @@ static SemanticSymbolTable collectSymbols(const ParsedPhrases& phrases) {
     for (const auto& primitive : primitive_types) {
         symbols.known_types.insert({primitive, TypeSymbol{TypeSymbolKind::Primitive, ""}});
     }
+
+    symbols.known_functions.insert("pointer");
+    symbols.function_parameter_counts["pointer"] = 1;
 
     registerRuntimeSymbols(symbols);
 
@@ -1550,6 +1620,25 @@ static void lowerBodyPhrases(
                     );
                     else_statements.push_back(node);
                     order.push_back({SemanticStatementKind::Else, else_statements.size() - 1});
+                break;
+            }
+            case ParsedPhraseKind::UnsafeBlock: {
+                lowerBodyPhrases(
+                    phrase->nested_phrases,
+                    variable_declarations,
+                    assignments,
+                    type_definitions,
+                    struct_definitions,
+                    enum_definitions,
+                    imports,
+                    calls,
+                    returns,
+                    if_statements,
+                    while_statements,
+                    for_statements,
+                    else_statements,
+                    order
+                );
                 break;
             }
             default:

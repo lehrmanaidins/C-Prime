@@ -19,6 +19,7 @@
 #include "phrases/struct_definition.cpp"
 #include "phrases/type_definition.cpp"
 #include "phrases/union_definition.cpp"
+#include "phrases/unsafe_block.cpp"
 #include "phrases/variable_declaration.cpp"
 
 static std::string trimParserText(const std::string& text) {
@@ -104,6 +105,7 @@ static bool hasTokenValue(const Tokens& tokens, const std::string& value) {
 static bool isDeclarationStarter(const std::string& value) {
     return value == "mutable"
         || value == "const"
+        || value == "unsafe"
         || value == "primitive"
         || value == "type"
         || value == "struct"
@@ -117,6 +119,7 @@ static std::string findMissingSemicolonBeforeToken(const Tokens& tokens) {
     int paren_depth = 0;
     int bracket_depth = 0;
     int brace_depth = 0;
+    int angle_depth = 0;
 
     for (size_t i = 0; i < tokens.size(); ++i) {
         if (!tokens[i]) {
@@ -142,9 +145,15 @@ static std::string findMissingSemicolonBeforeToken(const Tokens& tokens) {
             if (brace_depth > 0) {
                 --brace_depth;
             }
+        } else if (value == "<"
+            && (angle_depth > 0 || (i > 0 && tokens[i - 1]
+                && (tokens[i - 1]->value == "reference" || tokens[i - 1]->value == "pointer")))) {
+            ++angle_depth;
+        } else if (value == ">" && angle_depth > 0) {
+            --angle_depth;
         }
 
-        if (i == 0 || paren_depth > 0 || bracket_depth > 0 || brace_depth > 0) {
+        if (i == 0 || paren_depth > 0 || bracket_depth > 0 || brace_depth > 0 || angle_depth > 0) {
             continue;
         }
 
@@ -173,7 +182,9 @@ static void validatePhrase(const std::shared_ptr<Phrase>& phrase, ParsedPhraseKi
     }
 
     if (!phrase->tokens.empty() && phrase->tokens[0]
-        && (phrase->tokens[0]->value == "function" || phrase->tokens[0]->value == "template")) {
+        && (phrase->tokens[0]->value == "function" || phrase->tokens[0]->value == "template"
+            || (phrase->tokens[0]->value == "unsafe" && phrase->tokens.size() > 1 && phrase->tokens[1]
+                && phrase->tokens[1]->value == "function"))) {
         return;
     }
 
@@ -218,8 +229,10 @@ static bool isFunctionPhrase(const std::shared_ptr<Phrase>& phrase, size_t& open
     }
 
     const bool has_template_prefix = phrase->tokens[0] && phrase->tokens[0]->value == "template";
+    const bool has_unsafe_prefix = phrase->tokens[0] && phrase->tokens[0]->value == "unsafe"
+        && phrase->tokens.size() > 1 && phrase->tokens[1] && phrase->tokens[1]->value == "function";
     const size_t function_index = findTokenIndex(phrase->tokens, "function");
-    if ((has_template_prefix || (function_index == 0)) && function_index != phrase->tokens.size()) {
+    if ((has_template_prefix || has_unsafe_prefix || (function_index == 0)) && function_index != phrase->tokens.size()) {
         return findParentheses(phrase->tokens, open_paren, close_paren) && open_paren > function_index;
     }
 
@@ -231,11 +244,11 @@ static bool isTemplateTypeCategory(const std::string& name) {
 }
 
 static std::vector<ParsedTemplateParameter> parseTemplateParameters(const Tokens& tokens, size_t function_index) {
-    if (function_index == 0) {
+    if (function_index == 0 || !tokens[0] || tokens[0]->value != "template") {
         return {};
     }
 
-    if (!tokens[0] || tokens[0]->value != "template" || function_index < 5
+    if (function_index < 5
         || !tokens[1] || tokens[1]->value != "<"
         || !tokens[function_index - 1] || tokens[function_index - 1]->value != ">") {
         throw std::runtime_error("Parser error: invalid template declaration");
@@ -706,8 +719,11 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
         const std::string return_type = parseFunctionReturnType(phrase->tokens, close_paren);
         const size_t function_index = findTokenIndex(phrase->tokens, "function");
         auto function = std::make_shared<ParsedFunction>(function_name, return_type, parseTemplateParameters(phrase->tokens, function_index), phrase);
+        function->is_unsafe = phrase->tokens[0] && phrase->tokens[0]->value == "unsafe";
         parseFunctionParameters(phrase->tokens, open_paren, close_paren, phrase, function);
         parsed_phrase = function;
+    } else if (isKeywordPhrase(phrase, "unsafe") && phrase->tokens.size() == 1) {
+        parsed_phrase = std::make_shared<ParsedUnsafeBlock>(phrase);
     } else if (isTypeDefinitionPhrase(phrase)) {
         const std::string type_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
         const size_t colon_index = findTokenIndex(phrase->tokens, ":");
@@ -739,18 +755,32 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
         parsed_phrase = std::make_shared<ParsedImportStatement>(import_path, detectImportKind(import_path), phrase);
     } else if (isVariableDeclarationPhrase(phrase)) {
         const size_t equal_index = findAssignmentOperatorIndex(phrase->tokens);
-        const bool is_mutable = phrase->tokens[0] && phrase->tokens[0]->value == "mutable";
+        bool is_mutable = false;
+        bool is_unsafe = false;
+        size_t type_begin = 0;
+        while (type_begin < phrase->tokens.size() && phrase->tokens[type_begin]) {
+            const std::string& prefix_value = phrase->tokens[type_begin]->value;
+            if (prefix_value == "mutable" && !is_mutable) {
+                is_mutable = true;
+            } else if (prefix_value == "unsafe" && !is_unsafe) {
+                is_unsafe = true;
+            } else if (prefix_value == "const") {
+                // const-by-default; consumed without a dedicated flag
+            } else {
+                break;
+            }
+            ++type_begin;
+        }
         const bool has_initializer = equal_index != phrase->tokens.size();
         const size_t name_index = has_initializer
             ? (equal_index > 0 ? equal_index - 1 : 0)
             : (phrase->tokens.size() - 1);
         const std::string name = phrase->tokens[name_index] ? phrase->tokens[name_index]->value : "";
-        const size_t type_begin = (is_mutable || (phrase->tokens[0] && phrase->tokens[0]->value == "const")) ? 1 : 0;
         const std::string type_name = joinTokenRange(phrase->tokens, type_begin, name_index);
         const std::string initializer = has_initializer
             ? joinTokenRange(phrase->tokens, equal_index + 1, phrase->tokens.size())
             : "";
-        parsed_phrase = std::make_shared<ParsedVariableDeclaration>(type_name, name, initializer, is_mutable, phrase);
+        parsed_phrase = std::make_shared<ParsedVariableDeclaration>(type_name, name, initializer, is_mutable, is_unsafe, phrase);
     } else if (isReturnPhrase(phrase)) {
         parsed_phrase = std::make_shared<ParsedReturnStatement>(joinTokenRange(phrase->tokens, 1, phrase->tokens.size()), phrase);
     } else if (isBreakPhrase(phrase)) {

@@ -12,6 +12,7 @@ enum class SemanticTypeKind {
     Named,
     Tuple,
     Reference,
+    Pointer,
     Function
 };
 
@@ -24,6 +25,7 @@ struct SemanticTypeRef {
     std::vector<SemanticTypeRef> tuple_elements;
     std::vector<std::string> array_dimensions;
     std::shared_ptr<SemanticTypeRef> reference_target;
+    std::shared_ptr<SemanticTypeRef> pointer_target;
     std::vector<SemanticTypeRef> function_parameters;
     std::shared_ptr<SemanticTypeRef> function_return_type;
 };
@@ -115,6 +117,18 @@ static SemanticTypeRef parseTypeRef(const std::string& raw_type) {
         base_type.array_dimensions = dimensions;
         if (open != std::string::npos && close != std::string::npos && close > open) {
             base_type.reference_target = std::make_shared<SemanticTypeRef>(parseTypeRef(type.substr(open + 1, close - open - 1)));
+        }
+        return base_type;
+    }
+
+    if (compact.rfind("pointer<", 0) == 0 && compact.back() == '>') {
+        const size_t open = type.find('<');
+        const size_t close = type.rfind('>');
+        base_type.kind = SemanticTypeKind::Pointer;
+        base_type.name = "pointer";
+        base_type.array_dimensions = dimensions;
+        if (open != std::string::npos && close != std::string::npos && close > open) {
+            base_type.pointer_target = std::make_shared<SemanticTypeRef>(parseTypeRef(type.substr(open + 1, close - open - 1)));
         }
         return base_type;
     }

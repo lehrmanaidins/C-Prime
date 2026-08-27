@@ -42,6 +42,8 @@ static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& cont
         base += ">";
     } else if (resolved_type.kind == SemanticTypeKind::Reference && resolved_type.reference_target) {
         base = emitTypeRef(*resolved_type.reference_target, context) + "&";
+    } else if (resolved_type.kind == SemanticTypeKind::Pointer && resolved_type.pointer_target) {
+        base = emitTypeRef(*resolved_type.pointer_target, context) + "*";
     } else if (resolved_type.kind == SemanticTypeKind::Function) {
         base = "auto";
     } else {

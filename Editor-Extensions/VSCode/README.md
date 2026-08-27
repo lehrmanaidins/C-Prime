@@ -1,13 +1,21 @@
-# C-Prime Syntax Highlighting
+# C-Prime Language Support
 
-VS Code language support for C-Prime source files.
+VS Code language support for `.cprime` and `.hprime` source files.
+
+## Features
+
+- Syntax highlighting for C-Prime keywords, types, comments, strings, numbers, attributes, functions, and operators.
+- Bracket matching, automatic closing pairs, indentation, and C-Prime snippets.
+- Completions for keywords, primitives, built-in functions, and declarations in open C-Prime files.
+- Hover documentation for runtime built-ins, go-to-definition, document outline, and workspace symbol search.
+- Live diagnostics for unmatched delimiters and unterminated string literals. Set `cprime.enableDiagnostics` to `false` to disable them.
 
 ## Local installation
 
-From this directory, install the packaging tool and create a VSIX:
+From this directory, use Node.js 18 or later to create a VSIX:
 
 ```bash
-npm install --global @vscode/vsce
+npm run validate
 npm run package
 ```
 

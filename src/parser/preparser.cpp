@@ -29,6 +29,13 @@ static bool phraseIntroducesScope(const std::vector<std::shared_ptr<Token>>& tok
         return true;
     }
 
+    if (tokens[0] && tokens[0]->value == "unsafe") {
+        if (tokens.size() == 1) {
+            return true;
+        }
+        return tokens[1] && tokens[1]->value == "function";
+    }
+
     return false;
 }
 

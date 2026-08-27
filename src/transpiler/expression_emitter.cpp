@@ -16,6 +16,9 @@ static std::string emitExpression(const SemanticExpressionIR& expression, CppEmi
             }
             return expression.text;
         case SemanticExpressionKind::Call: {
+            if (expression.operator_symbol == "pointer" && expression.children.size() == 1) {
+                return "(&" + emitExpression(expression.children[0], context) + ")";
+            }
             std::string call = sanitizeIdentifier(expression.operator_symbol) + "(";
             for (size_t i = 0; i < expression.children.size(); ++i) {
                 if (i > 0) call += ", ";

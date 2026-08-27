@@ -1,0 +1,7 @@
+function main() {
+    primitive uint32 value = 10;
+    unsafe {
+        primitive uint32 inner = 1;
+    }
+    pointer<primitive uint32> p = pointer(value);
+}

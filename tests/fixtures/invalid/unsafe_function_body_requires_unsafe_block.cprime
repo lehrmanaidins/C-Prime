@@ -1,0 +1,7 @@
+unsafe function needs_explicit_unsafe(primitive uint32 value) -> primitive uint32 {
+    pointer<primitive uint32> tracked = pointer(value);
+    return value;
+}
+
+function main() {
+}
