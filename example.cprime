@@ -47,6 +47,11 @@ function boundedTemplateExample(T v) -> void {
     print(v);
 }
 
+template <type T: Character>
+function templateUnionExample(T v) -> void {
+    print(v);
+}
+
 @discard
 function exampleDiscardedFunction() -> primitive uint32 {
     return 42;
@@ -68,5 +73,7 @@ function main() {
     boundedTemplateExample('a');
 
     exampleDiscardedFunction();
+
+    templateUnionExample('a');
 
 }

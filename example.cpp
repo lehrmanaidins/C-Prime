@@ -77,6 +77,11 @@ requires (std::same_as<T, cprime::char8> || std::same_as<T, cprime::char16> || s
 auto boundedTemplateExample(T v) -> void {
     print(v);
 }
+template <typename T>
+requires (std::same_as<T, cprime::char8> || std::same_as<T, cprime::char16> || std::same_as<T, cprime::char32>)
+auto templateUnionExample(T v) -> void {
+    print(v);
+}
 auto exampleDiscardedFunction() -> cprime::uint32 {
     return 42;
 }
@@ -89,5 +94,6 @@ auto exampleDiscardedFunction() -> cprime::uint32 {
     const cprime::uint32 d = templateMultipleTypesExample(123, "abc");
     boundedTemplateExample(static_cast<cprime::char8>(97));
     exampleDiscardedFunction();
+    templateUnionExample(static_cast<cprime::char8>(97));
     return 0;
 }
