@@ -21,6 +21,7 @@ static bool phraseIntroducesScope(const std::vector<std::shared_ptr<Token>>& tok
         || tokens[0]->value == "template"
         || tokens[0]->value == "struct"
         || tokens[0]->value == "enum"
+        || tokens[0]->value == "type"
         || tokens[0]->value == "if"
         || tokens[0]->value == "while"
         || tokens[0]->value == "for"

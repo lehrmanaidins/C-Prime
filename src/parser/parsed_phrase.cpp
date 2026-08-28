@@ -27,7 +27,9 @@ enum class ParsedPhraseKind {
     ForStatement,
     ElseStatement,
     ImportStatement,
-    UnsafeBlock
+    UnsafeBlock,
+    RequiresClause,
+    EnsuresClause
 };
 
 struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
@@ -95,6 +97,10 @@ struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
                 return "ImportStatement";
             case ParsedPhraseKind::UnsafeBlock:
                 return "UnsafeBlock";
+            case ParsedPhraseKind::RequiresClause:
+                return "RequiresClause";
+            case ParsedPhraseKind::EnsuresClause:
+                return "EnsuresClause";
             case ParsedPhraseKind::Unknown:
             default:
                 return "Unknown";

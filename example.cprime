@@ -102,4 +102,6 @@ function main() {
     for (mutable primitive uint32 index = 0; index < 3; index += 1) {
         println(index);
     }
+    
+    unsafe pointer<primitive uint32> raw_pointer = pointer(counter);
 }

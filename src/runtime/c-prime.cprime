@@ -1,5 +1,15 @@
+
 union UnsignedInteger : uint8 | uint16 | uint32 | uint64;
 union SignedInteger : int8 | int16 | int32 | int64;
+
 union Integer : UnsignedInteger | SignedInteger;
 union Floating : float32 | float64;
+
 union Number : Integer | Floating;
+
+union Character : char8 | char16 | char32;
+union Boolean : bool;
+
+union Primitive : Number | Character | Boolean;
+
+type String : Character[];

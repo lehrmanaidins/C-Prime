@@ -363,6 +363,10 @@ static bool isVariableDeclarationPhrase(const std::shared_ptr<Phrase>& phrase) {
         return false;
     }
 
+    if (phrase->tokens[0] && (phrase->tokens[0]->value == "requires" || phrase->tokens[0]->value == "ensures")) {
+        return false;
+    }
+
     if (hasTokenValue(phrase->tokens, ":")) {
         return false;
     }
@@ -461,7 +465,34 @@ static bool isCallPhrase(const std::shared_ptr<Phrase>& phrase) {
         return false;
     }
 
-    return open_paren == 1 && close_paren == phrase->tokens.size() - 1;
+    if (open_paren == 0 || open_paren % 2 == 0 || close_paren != phrase->tokens.size() - 1) {
+        return false;
+    }
+
+    for (size_t i = 0; i < open_paren; ++i) {
+        if (!phrase->tokens[i]) {
+            return false;
+        }
+        if (i % 2 == 0) {
+            if (phrase->tokens[i]->type != TokenCatagory::Identifier) {
+                return false;
+            }
+        } else if (phrase->tokens[i]->value != ".") {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static std::string joinDottedTokenRange(const Tokens& tokens, size_t begin, size_t end_exclusive) {
+    std::string joined;
+    for (size_t i = begin; i < end_exclusive && i < tokens.size(); ++i) {
+        if (tokens[i]) {
+            joined += tokens[i]->value;
+        }
+    }
+    return joined;
 }
 
 static std::vector<std::string> parseCallArguments(const Tokens& tokens, size_t open_paren, size_t close_paren) {
@@ -724,6 +755,10 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
         parsed_phrase = function;
     } else if (isKeywordPhrase(phrase, "unsafe") && phrase->tokens.size() == 1) {
         parsed_phrase = std::make_shared<ParsedUnsafeBlock>(phrase);
+    } else if (isKeywordPhrase(phrase, "requires")) {
+        parsed_phrase = std::make_shared<ParsedRequiresClause>(joinTokenRange(phrase->tokens, 1, phrase->tokens.size()), phrase);
+    } else if (isKeywordPhrase(phrase, "ensures")) {
+        parsed_phrase = std::make_shared<ParsedEnsuresClause>(joinTokenRange(phrase->tokens, 1, phrase->tokens.size()), phrase);
     } else if (isTypeDefinitionPhrase(phrase)) {
         const std::string type_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
         const size_t colon_index = findTokenIndex(phrase->tokens, ":");
@@ -819,7 +854,7 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
             }
         }
 
-        const std::string function_name = phrase->tokens[0] ? phrase->tokens[0]->value : "";
+        const std::string function_name = joinDottedTokenRange(phrase->tokens, 0, open_paren);
         const auto arguments = parseCallArguments(phrase->tokens, open_paren, close_paren);
         parsed_phrase = std::make_shared<ParsedCallStatement>(function_name, arguments, phrase);
     } else {

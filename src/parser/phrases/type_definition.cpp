@@ -17,3 +17,25 @@ struct ParsedTypeDefinition : ParsedPhrase {
     std::string name;
     std::string base_type;
 };
+
+struct ParsedRequiresClause : ParsedPhrase {
+    ParsedRequiresClause(
+        const std::string& expression,
+        const std::shared_ptr<Phrase>& source_phrase = nullptr
+    ) : ParsedPhrase(ParsedPhraseKind::RequiresClause, source_phrase),
+        expression(expression) {
+    }
+
+    std::string expression;
+};
+
+struct ParsedEnsuresClause : ParsedPhrase {
+    ParsedEnsuresClause(
+        const std::string& expression,
+        const std::shared_ptr<Phrase>& source_phrase = nullptr
+    ) : ParsedPhrase(ParsedPhraseKind::EnsuresClause, source_phrase),
+        expression(expression) {
+    }
+
+    std::string expression;
+};

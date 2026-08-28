@@ -51,10 +51,17 @@ struct SemanticAssignmentIR {
     SourceLocation location;
 };
 
+struct SemanticFunctionIR;
+
 struct SemanticTypeDefinitionIR {
     std::string name;
     SemanticTypeRef base_type;
     SourceLocation location;
+    bool has_requires = false;
+    SemanticExpressionIR requires_clause;
+    bool has_ensures = false;
+    SemanticExpressionIR ensures_clause;
+    std::vector<SemanticFunctionIR> member_functions;
 };
 
 struct SemanticStructFieldIR {
@@ -226,6 +233,7 @@ struct SemanticSymbolTable {
     std::unordered_map<std::string, std::vector<std::string>> union_members;
     std::unordered_set<std::string> variadic_functions;
     std::unordered_map<std::string, VariableSymbol> external_values;
+    std::unordered_map<std::string, std::unordered_map<std::string, size_t>> type_member_functions;
     bool has_cpp_imports = false;
 };
 
@@ -475,6 +483,17 @@ static void collectSymbolsFromPhrase(const std::shared_ptr<ParsedPhrase>& phrase
                     TypeSymbol{TypeSymbolKind::Domain, trim(type_def->base_type)},
                     symbols
                 );
+
+                for (const auto& nested : phrase->nested_phrases) {
+                    if (!nested || nested->kind != ParsedPhraseKind::Function) {
+                        continue;
+                    }
+                    auto member_function = std::dynamic_pointer_cast<ParsedFunction>(nested);
+                    if (!member_function) {
+                        continue;
+                    }
+                    symbols.type_member_functions[type_def->name][member_function->name] = member_function->parameters.size();
+                }
             }
             break;
         }
@@ -981,6 +1000,36 @@ static void analyzeTypeDefinition(
     if (!isKnownTypeRefString(context.symbols, type_phrase->base_type)) {
         throw semanticError(type_phrase, "unknown base type '" + type_phrase->base_type + "' in phrase: " + joinPhraseText(type_phrase));
     }
+
+    const bool has_body = !type_phrase->nested_phrases.empty();
+    if (!has_body) {
+        return;
+    }
+
+    enterScope(context);
+    declareVariable(context, type_phrase->name, normalizeTypeName(type_phrase->base_type), false, type_phrase);
+
+    for (const auto& nested : type_phrase->nested_phrases) {
+        if (!nested) {
+            continue;
+        }
+
+        if (nested->kind == ParsedPhraseKind::RequiresClause) {
+            auto clause = std::dynamic_pointer_cast<ParsedRequiresClause>(nested);
+            if (clause) {
+                validateExpression(clause, parseExpressionIR(clause->expression, phraseStartLocation(clause)), context);
+            }
+        } else if (nested->kind == ParsedPhraseKind::EnsuresClause) {
+            auto clause = std::dynamic_pointer_cast<ParsedEnsuresClause>(nested);
+            if (clause) {
+                validateExpression(clause, parseExpressionIR(clause->expression, phraseStartLocation(clause)), context);
+            }
+        } else if (nested->kind == ParsedPhraseKind::Function) {
+            analyzeFunction(std::dynamic_pointer_cast<ParsedFunction>(nested), context);
+        }
+    }
+
+    leaveScope(context);
 }
 
 static void analyzeStructDefinition(
@@ -1133,6 +1182,40 @@ static void analyzeCallStatement(
     ValidationContext& context
 ) {
     if (!call_phrase) {
+        return;
+    }
+
+    const size_t dot_index = call_phrase->name.find('.');
+    if (dot_index != std::string::npos) {
+        const std::string object_name = call_phrase->name.substr(0, dot_index);
+        const std::string method_name = call_phrase->name.substr(dot_index + 1);
+
+        VariableSymbol* symbol = lookupVariable(context, object_name);
+        std::string type_name;
+        if (symbol) {
+            type_name = normalizeTypeName(symbol->type_name);
+        } else {
+            auto external_it = context.symbols.external_values.find(object_name);
+            if (external_it == context.symbols.external_values.end()) {
+                throw semanticError(call_phrase, "unknown value '" + object_name + "'");
+            }
+            type_name = normalizeTypeName(external_it->second.type_name);
+        }
+
+        const auto type_methods_it = context.symbols.type_member_functions.find(type_name);
+        if (type_methods_it == context.symbols.type_member_functions.end()
+            || type_methods_it->second.find(method_name) == type_methods_it->second.end()) {
+            throw semanticError(call_phrase, "type '" + type_name + "' has no member function '" + method_name + "'");
+        }
+
+        const size_t arity = type_methods_it->second.at(method_name);
+        if (arity != call_phrase->arguments.size()) {
+            throw semanticError(call_phrase, "member function '" + method_name + "' expects " + std::to_string(arity) + " argument(s), got " + std::to_string(call_phrase->arguments.size()));
+        }
+
+        for (const auto& argument : call_phrase->arguments) {
+            validateExpression(call_phrase, parseExpressionIR(argument, phraseStartLocation(call_phrase)), context);
+        }
         return;
     }
 
@@ -1341,11 +1424,92 @@ static SemanticAssignmentIR lowerAssignment(const std::shared_ptr<ParsedAssignme
     return node;
 }
 
-static SemanticTypeDefinitionIR lowerTypeDefinition(const std::shared_ptr<ParsedTypeDefinition>& phrase) {
+static SemanticFunctionIR lowerFunction(
+    const std::shared_ptr<ParsedFunction>& phrase,
+    const SemanticSymbolTable& symbols
+);
+
+static void renameIdentifierInExpression(SemanticExpressionIR& expression, const std::string& from, const std::string& to) {
+    if (expression.kind == SemanticExpressionKind::Identifier && trim(expression.text) == from) {
+        expression.text = to;
+    }
+    for (auto& child : expression.children) {
+        renameIdentifierInExpression(child, from, to);
+    }
+}
+
+static void renameIdentifierInFunction(SemanticFunctionIR& function_ir, const std::string& from, const std::string& to) {
+    for (auto& node : function_ir.variable_declarations) {
+        renameIdentifierInExpression(node.initializer, from, to);
+    }
+    for (auto& node : function_ir.assignments) {
+        renameIdentifierInExpression(node.expression, from, to);
+    }
+    for (auto& node : function_ir.calls) {
+        for (auto& argument : node.arguments) {
+            renameIdentifierInExpression(argument, from, to);
+        }
+    }
+    for (auto& node : function_ir.returns) {
+        renameIdentifierInExpression(node.expression, from, to);
+    }
+    for (auto& node : function_ir.if_statements) {
+        renameIdentifierInExpression(node.condition, from, to);
+    }
+    for (auto& node : function_ir.while_statements) {
+        renameIdentifierInExpression(node.condition, from, to);
+    }
+    for (auto& node : function_ir.for_statements) {
+        renameIdentifierInExpression(node.initializer, from, to);
+        renameIdentifierInExpression(node.condition, from, to);
+        renameIdentifierInExpression(node.update, from, to);
+    }
+    for (auto& node : function_ir.else_statements) {
+        renameIdentifierInExpression(node.condition, from, to);
+    }
+}
+
+static SemanticTypeDefinitionIR lowerTypeDefinition(const std::shared_ptr<ParsedTypeDefinition>& phrase, const SemanticSymbolTable& symbols) {
     SemanticTypeDefinitionIR node{};
     node.name = phrase->name;
     node.base_type = parseTypeRef(phrase->base_type);
     node.location = phraseStartLocation(phrase);
+
+    for (const auto& nested : phrase->nested_phrases) {
+        if (!nested) {
+            continue;
+        }
+
+        if (nested->kind == ParsedPhraseKind::RequiresClause) {
+            auto clause = std::dynamic_pointer_cast<ParsedRequiresClause>(nested);
+            if (clause) {
+                node.has_requires = true;
+                node.requires_clause = parseExpressionIR(clause->expression, phraseStartLocation(clause));
+            }
+        } else if (nested->kind == ParsedPhraseKind::EnsuresClause) {
+            auto clause = std::dynamic_pointer_cast<ParsedEnsuresClause>(nested);
+            if (clause) {
+                node.has_ensures = true;
+                node.ensures_clause = parseExpressionIR(clause->expression, phraseStartLocation(clause));
+            }
+        } else if (nested->kind == ParsedPhraseKind::Function) {
+            auto function_phrase = std::dynamic_pointer_cast<ParsedFunction>(nested);
+            if (function_phrase) {
+                node.member_functions.push_back(lowerFunction(function_phrase, symbols));
+            }
+        }
+    }
+
+    if (node.has_requires) {
+        renameIdentifierInExpression(node.requires_clause, node.name, "value");
+    }
+    if (node.has_ensures) {
+        renameIdentifierInExpression(node.ensures_clause, node.name, "value");
+    }
+    for (auto& member_function : node.member_functions) {
+        renameIdentifierInFunction(member_function, node.name, "value");
+    }
+
     return node;
 }
 
@@ -1422,7 +1586,8 @@ static void lowerBodyPhrases(
     std::vector<SemanticWhileIR>& while_statements,
     std::vector<SemanticForIR>& for_statements,
     std::vector<SemanticElseIR>& else_statements,
-    std::vector<SemanticStatementRef>& order
+    std::vector<SemanticStatementRef>& order,
+    const SemanticSymbolTable& symbols
 );
 
 static void lowerBodyPhrases(
@@ -1439,7 +1604,8 @@ static void lowerBodyPhrases(
     std::vector<SemanticWhileIR>& while_statements,
     std::vector<SemanticForIR>& for_statements,
     std::vector<SemanticElseIR>& else_statements,
-    std::vector<SemanticStatementRef>& order
+    std::vector<SemanticStatementRef>& order,
+    const SemanticSymbolTable& symbols
 ) {
     for (const auto& phrase : phrases) {
         if (!phrase) {
@@ -1460,7 +1626,7 @@ static void lowerBodyPhrases(
                 break;
             }
             case ParsedPhraseKind::TypeDefinition: {
-                auto node = lowerTypeDefinition(std::dynamic_pointer_cast<ParsedTypeDefinition>(phrase));
+                auto node = lowerTypeDefinition(std::dynamic_pointer_cast<ParsedTypeDefinition>(phrase), symbols);
                 type_definitions.push_back(node);
                 order.push_back({SemanticStatementKind::TypeDefinition, type_definitions.size() - 1});
                 break;
@@ -1539,7 +1705,8 @@ static void lowerBodyPhrases(
                         while_statements,
                         for_statements,
                         else_statements,
-                        node.body
+                        node.body,
+                        symbols
                     );
                     if_statements.push_back(node);
                     order.push_back({SemanticStatementKind::If, if_statements.size() - 1});
@@ -1564,7 +1731,8 @@ static void lowerBodyPhrases(
                         while_statements,
                         for_statements,
                         else_statements,
-                        node.body
+                        node.body,
+                        symbols
                     );
                     while_statements.push_back(node);
                     order.push_back({SemanticStatementKind::While, while_statements.size() - 1});
@@ -1591,7 +1759,8 @@ static void lowerBodyPhrases(
                         while_statements,
                         for_statements,
                         else_statements,
-                        node.body
+                        node.body,
+                        symbols
                     );
                     for_statements.push_back(node);
                     order.push_back({SemanticStatementKind::For, for_statements.size() - 1});
@@ -1616,7 +1785,8 @@ static void lowerBodyPhrases(
                         while_statements,
                         for_statements,
                         else_statements,
-                        node.body
+                        node.body,
+                        symbols
                     );
                     else_statements.push_back(node);
                     order.push_back({SemanticStatementKind::Else, else_statements.size() - 1});
@@ -1637,7 +1807,8 @@ static void lowerBodyPhrases(
                     while_statements,
                     for_statements,
                     else_statements,
-                    order
+                    order,
+                    symbols
                 );
                 break;
             }
@@ -1718,7 +1889,8 @@ static SemanticFunctionIR lowerFunction(
         function_ir.while_statements,
         function_ir.for_statements,
         function_ir.else_statements,
-        function_ir.body_order
+        function_ir.body_order,
+        symbols
     );
 
     return function_ir;
@@ -1748,7 +1920,7 @@ static void lowerTopLevelPhrase(
             break;
         }
         case ParsedPhraseKind::TypeDefinition: {
-            program.type_definitions.push_back(lowerTypeDefinition(std::dynamic_pointer_cast<ParsedTypeDefinition>(phrase)));
+            program.type_definitions.push_back(lowerTypeDefinition(std::dynamic_pointer_cast<ParsedTypeDefinition>(phrase), symbols));
             program.top_level_order.push_back({SemanticStatementKind::TypeDefinition, program.type_definitions.size() - 1});
             break;
         }

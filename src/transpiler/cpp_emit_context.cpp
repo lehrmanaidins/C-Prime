@@ -25,6 +25,7 @@ struct CppEmitContext {
     std::unordered_set<std::string> required_headers;
     std::unordered_map<std::string, SemanticTypeRef> type_aliases;
     std::unordered_set<std::string> struct_types;
+    std::unordered_set<std::string> domain_struct_types;
     std::vector<CppSourceMapEntry> source_map;
     size_t current_cpp_line = 1;
 
@@ -56,25 +57,23 @@ static std::string sanitizeIdentifier(const std::string& name) {
 
 static std::string mapPrimitiveType(const std::string& type_name, CppEmitContext& context) {
     if (type_name == "bool") return "bool";
-    if (type_name == "char8") return "char8_t";
-    if (type_name == "char16") return "char16_t";
-    if (type_name == "char32") return "char32_t";
-    if (type_name == "int8" || type_name == "int16" || type_name == "int32" || type_name == "int64"
-        || type_name == "uint8" || type_name == "uint16" || type_name == "uint32" || type_name == "uint64") {
-        context.required_headers.insert("<cstdint>");
-    }
-
-    if (type_name == "int8") return "int8_t";
-    if (type_name == "int16") return "int16_t";
-    if (type_name == "int32") return "int32_t";
-    if (type_name == "int64") return "int64_t";
-    if (type_name == "uint8") return "uint8_t";
-    if (type_name == "uint16") return "uint16_t";
-    if (type_name == "uint32") return "uint32_t";
-    if (type_name == "uint64") return "uint64_t";
-    if (type_name == "float32") return "float";
-    if (type_name == "float64") return "double";
     if (type_name == "void") return "void";
+
+    context.required_headers.insert("\"src/runtime/c-prime.hpp\"");
+
+    if (type_name == "char8") return "cprime::char8";
+    if (type_name == "char16") return "cprime::char16";
+    if (type_name == "char32") return "cprime::char32";
+    if (type_name == "int8") return "cprime::int8";
+    if (type_name == "int16") return "cprime::int16";
+    if (type_name == "int32") return "cprime::int32";
+    if (type_name == "int64") return "cprime::int64";
+    if (type_name == "uint8") return "cprime::uint8";
+    if (type_name == "uint16") return "cprime::uint16";
+    if (type_name == "uint32") return "cprime::uint32";
+    if (type_name == "uint64") return "cprime::uint64";
+    if (type_name == "float32") return "cprime::float32";
+    if (type_name == "float64") return "cprime::float64";
 
     return sanitizeIdentifier(type_name);
 }
