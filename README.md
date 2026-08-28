@@ -4,7 +4,7 @@
 <h3 align="center">Built for Critical Systems</h3>
 
 <p align="center">
-    <img src="c-prime-icon.png" alt="C-Prime Logo" width="175">
+    <img src="C-Prime-Logo.svg" alt="C-Prime Logo" width="150">
 </p>
 
 --- 
