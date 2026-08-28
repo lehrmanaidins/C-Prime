@@ -4,11 +4,28 @@
 
 #include "type_emitter.cpp"
 
+static bool isCharLiteralExpression(const std::string& text) {
+    return text.size() >= 3 && text.front() == '\'' && text.back() == '\'';
+}
+
+static std::string emitCharLiteralExpression(const std::string& text, CppEmitContext& context) {
+    const auto code_point = decodedCharLiteralCodePoint(text);
+    if (!code_point.has_value()) {
+        return text;
+    }
+
+    context.required_headers.insert("\"src/runtime/c-prime.hpp\"");
+    return "static_cast<cprime::" + smallestCharTypeForCodePoint(code_point.value()) + ">(" + std::to_string(code_point.value()) + ")";
+}
+
 static std::string emitExpression(const SemanticExpressionIR& expression, CppEmitContext& context) {
     switch (expression.kind) {
         case SemanticExpressionKind::Identifier:
             return sanitizeIdentifier(expression.text);
         case SemanticExpressionKind::Literal:
+            if (isCharLiteralExpression(expression.text)) {
+                return emitCharLiteralExpression(expression.text, context);
+            }
             return expression.text;
         case SemanticExpressionKind::Binary:
             if (expression.children.size() == 2) {
@@ -16,9 +33,6 @@ static std::string emitExpression(const SemanticExpressionIR& expression, CppEmi
             }
             return expression.text;
         case SemanticExpressionKind::Call: {
-            if (expression.operator_symbol == "pointer" && expression.children.size() == 1) {
-                return "(&" + emitExpression(expression.children[0], context) + ")";
-            }
             std::string call = sanitizeIdentifier(expression.operator_symbol) + "(";
             for (size_t i = 0; i < expression.children.size(); ++i) {
                 if (i > 0) call += ", ";

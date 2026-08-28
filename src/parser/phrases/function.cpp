@@ -27,6 +27,7 @@ struct ParsedFunction : ParsedPhrase {
 
     std::string name;
     std::string return_type;
+    std::vector<std::string> tags;
     std::vector<ParsedTemplateParameter> template_parameters;
     std::vector<std::shared_ptr<ParsedPhrase>> parameters;
     bool is_unsafe = false;

@@ -12,7 +12,6 @@ union
 reference
 pointer
 array
-list
 
 // Functions / Contracts
 function
@@ -45,8 +44,9 @@ unsafe
 null
 void
 
-// Function Attributes
+// Function Tags
 pure
 entry
 critical
 interrupt
+discard

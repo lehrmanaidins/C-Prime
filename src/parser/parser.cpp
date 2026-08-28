@@ -166,7 +166,7 @@ static std::string findMissingSemicolonBeforeToken(const Tokens& tokens) {
         }
 
         const std::string prev = tokens[i - 1]->value;
-        if (isDeclarationStarter(prev) || prev == ":" || prev == ",") {
+        if (isDeclarationStarter(prev) || prev == ":" || prev == "," || prev == "|") {
             continue;
         }
 
@@ -176,15 +176,34 @@ static std::string findMissingSemicolonBeforeToken(const Tokens& tokens) {
     return "";
 }
 
+static std::vector<std::string> collectLeadingFunctionTags(const Tokens& tokens) {
+    std::vector<std::string> tags{};
+    size_t index = 0;
+    while (index + 1 < tokens.size() && tokens[index] && tokens[index]->value == "@" && tokens[index + 1]) {
+        tags.push_back(tokens[index + 1]->value);
+        index += 2;
+    }
+    return tags;
+}
+
+static size_t functionPrefixStart(const Tokens& tokens) {
+    size_t index = 0;
+    while (index + 1 < tokens.size() && tokens[index] && tokens[index]->value == "@" && tokens[index + 1]) {
+        index += 2;
+    }
+    return index;
+}
+
 static void validatePhrase(const std::shared_ptr<Phrase>& phrase, ParsedPhraseKind parent_kind) {
     if (!phrase) {
         return;
     }
 
-    if (!phrase->tokens.empty() && phrase->tokens[0]
-        && (phrase->tokens[0]->value == "function" || phrase->tokens[0]->value == "template"
-            || (phrase->tokens[0]->value == "unsafe" && phrase->tokens.size() > 1 && phrase->tokens[1]
-                && phrase->tokens[1]->value == "function"))) {
+    const size_t start = functionPrefixStart(phrase->tokens);
+    if (start < phrase->tokens.size() && phrase->tokens[start]
+        && (phrase->tokens[start]->value == "function" || phrase->tokens[start]->value == "template"
+            || (phrase->tokens[start]->value == "unsafe" && phrase->tokens.size() > start + 1 && phrase->tokens[start + 1]
+                && phrase->tokens[start + 1]->value == "function"))) {
         return;
     }
 
@@ -228,11 +247,16 @@ static bool isFunctionPhrase(const std::shared_ptr<Phrase>& phrase, size_t& open
         return false;
     }
 
-    const bool has_template_prefix = phrase->tokens[0] && phrase->tokens[0]->value == "template";
-    const bool has_unsafe_prefix = phrase->tokens[0] && phrase->tokens[0]->value == "unsafe"
-        && phrase->tokens.size() > 1 && phrase->tokens[1] && phrase->tokens[1]->value == "function";
+    const size_t start = functionPrefixStart(phrase->tokens);
+    if (start >= phrase->tokens.size()) {
+        return false;
+    }
+
+    const bool has_template_prefix = phrase->tokens[start] && phrase->tokens[start]->value == "template";
+    const bool has_unsafe_prefix = phrase->tokens[start] && phrase->tokens[start]->value == "unsafe"
+        && phrase->tokens.size() > start + 1 && phrase->tokens[start + 1] && phrase->tokens[start + 1]->value == "function";
     const size_t function_index = findTokenIndex(phrase->tokens, "function");
-    if ((has_template_prefix || has_unsafe_prefix || (function_index == 0)) && function_index != phrase->tokens.size()) {
+    if ((has_template_prefix || has_unsafe_prefix || (function_index == start)) && function_index != phrase->tokens.size()) {
         return findParentheses(phrase->tokens, open_paren, close_paren) && open_paren > function_index;
     }
 
@@ -243,19 +267,24 @@ static bool isTemplateTypeCategory(const std::string& name) {
     return name == "Integral" || name == "Floating";
 }
 
+static std::string joinTemplateConstraintTokens(const Tokens& tokens, size_t begin, size_t end_exclusive) {
+    return joinTokenRange(tokens, begin, end_exclusive);
+}
+
 static std::vector<ParsedTemplateParameter> parseTemplateParameters(const Tokens& tokens, size_t function_index) {
-    if (function_index == 0 || !tokens[0] || tokens[0]->value != "template") {
+    const size_t start = functionPrefixStart(tokens);
+    if (function_index <= start || start >= tokens.size() || !tokens[start] || tokens[start]->value != "template") {
         return {};
     }
 
-    if (function_index < 5
-        || !tokens[1] || tokens[1]->value != "<"
+    if (function_index < start + 5
+        || !tokens[start + 1] || tokens[start + 1]->value != "<"
         || !tokens[function_index - 1] || tokens[function_index - 1]->value != ">") {
         throw std::runtime_error("Parser error: invalid template declaration");
     }
 
     std::vector<ParsedTemplateParameter> parameters;
-    size_t index = 2;
+    size_t index = start + 2;
     while (index < function_index - 1) {
         if (!tokens[index] || tokens[index]->value != "type" || index + 1 >= function_index - 1 || !tokens[index + 1]) {
             throw std::runtime_error("Parser error: template parameters must use 'type Name'");
@@ -278,7 +307,17 @@ static std::vector<ParsedTemplateParameter> parseTemplateParameters(const Tokens
                     throw std::runtime_error("Parser error: invalid template type constraint");
                 }
 
-                const std::string constraint = tokens[index]->value;
+                const size_t constraint_begin = index;
+                while (index < function_index - 1 && tokens[index]
+                    && tokens[index]->value != "|" && tokens[index]->value != ",") {
+                    ++index;
+                }
+
+                const std::string constraint = joinTemplateConstraintTokens(tokens, constraint_begin, index);
+                if (constraint.empty()) {
+                    throw std::runtime_error("Parser error: invalid template type constraint");
+                }
+
                 if (isTemplateTypeCategory(constraint)) {
                     if (!parameter.allowed_types.empty() || !parameter.category.empty()) {
                         throw std::runtime_error("Parser error: template category cannot be combined with other constraints");
@@ -290,7 +329,6 @@ static std::vector<ParsedTemplateParameter> parseTemplateParameters(const Tokens
                     }
                     parameter.allowed_types.push_back(constraint);
                 }
-                ++index;
 
                 if (index >= function_index - 1 || !tokens[index] || tokens[index]->value != "|") {
                     break;
@@ -337,11 +375,15 @@ static bool isUnionDefinitionPhrase(const std::shared_ptr<Phrase>& phrase) {
 
 static std::vector<std::string> parseUnionMembers(const Tokens& tokens, size_t colon_index) {
     std::vector<std::string> members;
-    for (size_t i = colon_index + 1; i < tokens.size(); ++i) {
-        if (!tokens[i] || tokens[i]->value == "|") {
-            continue;
+    size_t member_begin = colon_index + 1;
+    for (size_t i = colon_index + 1; i <= tokens.size(); ++i) {
+        if (i == tokens.size() || (tokens[i] && tokens[i]->value == "|")) {
+            const std::string member = joinTokenRange(tokens, member_begin, i);
+            if (!member.empty()) {
+                members.push_back(member);
+            }
+            member_begin = i + 1;
         }
-        members.push_back(tokens[i]->value);
     }
     return members;
 }
@@ -750,7 +792,9 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
         const std::string return_type = parseFunctionReturnType(phrase->tokens, close_paren);
         const size_t function_index = findTokenIndex(phrase->tokens, "function");
         auto function = std::make_shared<ParsedFunction>(function_name, return_type, parseTemplateParameters(phrase->tokens, function_index), phrase);
-        function->is_unsafe = phrase->tokens[0] && phrase->tokens[0]->value == "unsafe";
+        const size_t prefix_start = functionPrefixStart(phrase->tokens);
+        function->tags = collectLeadingFunctionTags(phrase->tokens);
+        function->is_unsafe = prefix_start < phrase->tokens.size() && phrase->tokens[prefix_start] && phrase->tokens[prefix_start]->value == "unsafe";
         parseFunctionParameters(phrase->tokens, open_paren, close_paren, phrase, function);
         parsed_phrase = function;
     } else if (isKeywordPhrase(phrase, "unsafe") && phrase->tokens.size() == 1) {

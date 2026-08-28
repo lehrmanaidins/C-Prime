@@ -10,12 +10,12 @@ static void emitMemberFunction(
 ) {
     context.pushLine(function.location, "function");
     const std::string return_type = emitTypeRef(function.return_type, context);
-    std::string signature = return_type + " " + sanitizeIdentifier(function.name) + "(";
+    std::string signature = nodiscardPrefix(return_type, function.is_discardable) + "auto " + sanitizeIdentifier(function.name) + "(";
     for (size_t i = 0; i < function.parameters.size(); ++i) {
         if (i > 0) signature += ", ";
         signature += emitTypeRef(function.parameters[i].type, context) + " " + sanitizeIdentifier(function.parameters[i].name);
     }
-    signature += ")";
+    signature += ") -> " + return_type;
     appendLine(output, context, indent_str + signature + " {");
 
     const std::vector<SemanticImportIR> no_imports{};
@@ -53,10 +53,10 @@ static void emitTypeDefinitionStatement(
         }
     }
 
-    if (!type_def.has_requires && !type_def.has_ensures && type_def.member_functions.empty() && has_template_array_dim) {
+    const bool is_simple_type_alias = !type_def.has_requires && !type_def.has_ensures && type_def.member_functions.empty();
+    if (is_simple_type_alias && has_template_array_dim) {
         context.type_aliases[type_def.name] = type_def.base_type;
         context.pushLine(type_def.location, "type");
-        appendLine(output, context, indent_str + "using " + sanitizeIdentifier(type_def.name) + " = " + emitTypeRef(type_def.base_type, context) + ";");
         return;
     }
 
@@ -72,7 +72,7 @@ static void emitTypeDefinitionStatement(
     appendLine(output, context, indent_str + "    " + base_type_str + " value;");
     appendLine(output, context, "");
     appendLine(output, context, indent_str + "    template <typename T>");
-    appendLine(output, context, indent_str + "    " + name + "(T&& value_arg) : value(std::forward<T>(value_arg)) {");
+    appendLine(output, context, indent_str + "    [[nodiscard]] " + name + "(T&& value_arg) : value(std::forward<T>(value_arg)) {");
     if (type_def.has_requires) {
         appendLine(output, context, indent_str + "        if (!(" + emitExpression(type_def.requires_clause, context) + ")) { throw std::runtime_error(\"" + type_def.name + ": requires clause violated\"); }");
     }
@@ -82,9 +82,9 @@ static void emitTypeDefinitionStatement(
     appendLine(output, context, indent_str + "    }");
     appendLine(output, context, "");
     appendLine(output, context, indent_str + "    template <typename T>");
-    appendLine(output, context, indent_str + "    " + name + "& operator=(T&& value_arg) { *this = " + name + "(std::forward<T>(value_arg)); return *this; }");
+    appendLine(output, context, indent_str + "    [[nodiscard]] " + name + "& operator=(T&& value_arg) { *this = " + name + "(std::forward<T>(value_arg)); return *this; }");
     appendLine(output, context, "");
-    appendLine(output, context, indent_str + "    operator " + base_type_str + "() const { return value; }");
+    appendLine(output, context, indent_str + "    [[nodiscard]] operator " + base_type_str + "() const { return value; }");
 
     for (const auto& member_function : type_def.member_functions) {
         appendLine(output, context, "");

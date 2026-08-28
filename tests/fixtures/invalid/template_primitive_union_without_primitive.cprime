@@ -1,0 +1,8 @@
+template <type T : char8 | primitive char16>
+function identity(T value) -> T {
+    return value;
+}
+
+function main() {
+    primitive char8 value = identity('a');
+}

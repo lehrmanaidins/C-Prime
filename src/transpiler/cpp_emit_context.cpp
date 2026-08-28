@@ -24,6 +24,7 @@ struct CppEmitResult {
 struct CppEmitContext {
     std::unordered_set<std::string> required_headers;
     std::unordered_map<std::string, SemanticTypeRef> type_aliases;
+    std::unordered_map<std::string, std::vector<std::string>> union_members;
     std::unordered_set<std::string> struct_types;
     std::unordered_set<std::string> domain_struct_types;
     std::vector<CppSourceMapEntry> source_map;
@@ -80,6 +81,10 @@ static std::string mapPrimitiveType(const std::string& type_name, CppEmitContext
 
 static std::string indent(size_t depth) {
     return std::string(depth * 4, ' ');
+}
+
+static std::string nodiscardPrefix(const std::string& return_type, bool is_discardable) {
+    return !is_discardable && return_type != "void" ? "[[nodiscard]] " : "";
 }
 
 static void appendLine(std::string& output, CppEmitContext& context, const std::string& line) {

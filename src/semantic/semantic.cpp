@@ -166,6 +166,8 @@ struct SemanticFunctionIR {
     SemanticTypeRef return_type;
     std::vector<SemanticTemplateParameterIR> template_parameters;
     std::vector<SemanticParameterIR> parameters;
+    std::vector<std::string> tags;
+    bool is_discardable = false;
 
     std::vector<SemanticVariableDeclarationIR> variable_declarations;
     std::vector<SemanticAssignmentIR> assignments;
@@ -198,6 +200,7 @@ struct SemanticProgram {
     std::vector<SemanticForIR> for_statements;
     std::vector<SemanticElseIR> else_statements;
     std::vector<SemanticStatementRef> top_level_order;
+    std::unordered_map<std::string, std::vector<std::string>> union_members;
 };
 
 enum class TypeSymbolKind {
@@ -643,6 +646,12 @@ static bool isNumericPrimitive(const std::string& type_name) {
         || type_name == "float16" || type_name == "float32" || type_name == "float64" || type_name == "float128";
 }
 
+static bool templateConstraintRequiresPrimitivePrefix(const std::string& type_name, const SemanticSymbolTable& symbols) {
+    const std::string normalized_type = normalizeTypeName(type_name);
+    const auto type_it = symbols.known_types.find(normalized_type);
+    return type_it != symbols.known_types.end() && type_it->second.kind == TypeSymbolKind::Primitive;
+}
+
 static bool isTemplateConstraintMatch(
     const std::string& type_name,
     const TemplateTypeConstraint& constraint,
@@ -692,6 +701,10 @@ static void validateTemplateCallConstraints(
     for (size_t i = 0; i < arguments.size() && i < parameter_types.size(); ++i) {
         const auto constraint_it = constraints.find(parameter_types[i]);
         if (constraint_it == constraints.end()) {
+            continue;
+        }
+
+        if (constraint_it->second.allowed_types.empty() && constraint_it->second.category.empty()) {
             continue;
         }
 
@@ -921,6 +934,10 @@ static void analyzeFunction(
         for (const auto& allowed_type : parameter.allowed_types) {
             if (!isKnownTypeRefString(context.symbols, allowed_type)) {
                 throw semanticError(function_phrase, "unknown template constraint type '" + allowed_type + "'");
+            }
+            const SemanticTypeRef allowed_type_ref = parseTypeRef(allowed_type);
+            if (templateConstraintRequiresPrimitivePrefix(allowed_type, context.symbols) && !allowed_type_ref.is_primitive) {
+                throw semanticError(function_phrase, "template constraint '" + allowed_type + "' must use the 'primitive' keyword");
             }
         }
     }
@@ -1377,7 +1394,7 @@ static SemanticSymbolTable collectSymbols(const ParsedPhrases& phrases) {
 
     const std::vector<std::string> primitive_types = {
         "bool", "char8", "char16", "char32", "int8", "int16", "int32", "int64",
-        "uint8", "uint16", "uint32", "uint64", "float16", "float32", "float64", "float128", "void"
+        "uint8", "uint16", "uint32", "uint64", "float32", "float64", "void"
     };
 
     for (const auto& primitive : primitive_types) {
@@ -1386,6 +1403,8 @@ static SemanticSymbolTable collectSymbols(const ParsedPhrases& phrases) {
 
     symbols.known_functions.insert("pointer");
     symbols.function_parameter_counts["pointer"] = 1;
+    symbols.known_functions.insert("reference");
+    symbols.function_parameter_counts["reference"] = 1;
 
     registerRuntimeSymbols(symbols);
 
@@ -1841,6 +1860,8 @@ static SemanticFunctionIR lowerFunction(
     SemanticFunctionIR function_ir{};
     function_ir.name = phrase->name;
     function_ir.return_type = phrase->return_type.empty() ? parseTypeRef("void") : parseTypeRef(phrase->return_type);
+    function_ir.tags = phrase->tags;
+    function_ir.is_discardable = std::find(function_ir.tags.begin(), function_ir.tags.end(), "discard") != function_ir.tags.end();
     for (const auto& parameter : phrase->template_parameters) {
         SemanticTemplateParameterIR template_parameter{};
         template_parameter.name = parameter.name;
@@ -1953,6 +1974,7 @@ SemanticProgram buildSemanticProgram(const ParsedPhrases& phrases) {
     validateSemantics(phrases, symbols);
 
     SemanticProgram program{};
+    program.union_members = symbols.union_members;
     for (const auto& phrase : phrases) {
         lowerTopLevelPhrase(phrase, program, symbols);
     }

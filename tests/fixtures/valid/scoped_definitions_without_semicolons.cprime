@@ -1,0 +1,22 @@
+type Count : primitive uint8 {
+}
+
+struct Reading {
+    Count value;
+    primitive bool ok;
+}
+
+enum ReadingState {
+    READY,
+    FAILED
+}
+
+function main() {
+    Count count = 1;
+    Reading reading = {
+        value = 2,
+        ok = true
+    };
+    ReadingState state = ReadingState::READY;
+    println(count);
+}

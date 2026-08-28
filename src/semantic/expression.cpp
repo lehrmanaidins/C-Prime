@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -148,14 +149,87 @@ static bool isFloatLiteral(const std::string& text) {
     return saw_dot && saw_digit;
 }
 
+static std::optional<std::uint32_t> decodedCharLiteralCodePoint(const std::string& text) {
+    const std::string literal = trim(text);
+    if (literal.size() < 3 || literal.front() != '\'' || literal.back() != '\'') {
+        return std::nullopt;
+    }
+
+    const std::string inner = literal.substr(1, literal.size() - 2);
+    if (inner.empty()) {
+        return std::nullopt;
+    }
+
+    if (inner.front() == '\\') {
+        if (inner.size() < 2) {
+            return std::nullopt;
+        }
+
+        switch (inner[1]) {
+            case 'n': return static_cast<std::uint32_t>('\n');
+            case 't': return static_cast<std::uint32_t>('\t');
+            case 'r': return static_cast<std::uint32_t>('\r');
+            case '\\': return static_cast<std::uint32_t>('\\');
+            case '\'': return static_cast<std::uint32_t>('\'');
+            case '"': return static_cast<std::uint32_t>('"');
+            case '0': return static_cast<std::uint32_t>('\0');
+            default: return static_cast<std::uint32_t>(static_cast<unsigned char>(inner[1]));
+        }
+    }
+
+    const unsigned char first = static_cast<unsigned char>(inner[0]);
+    if (first < 0x80) {
+        return first;
+    }
+
+    std::uint32_t code_point = 0;
+    size_t expected_size = 0;
+    if ((first & 0xE0) == 0xC0) {
+        code_point = first & 0x1F;
+        expected_size = 2;
+    } else if ((first & 0xF0) == 0xE0) {
+        code_point = first & 0x0F;
+        expected_size = 3;
+    } else if ((first & 0xF8) == 0xF0) {
+        code_point = first & 0x07;
+        expected_size = 4;
+    } else {
+        return std::nullopt;
+    }
+
+    if (inner.size() < expected_size) {
+        return std::nullopt;
+    }
+
+    for (size_t i = 1; i < expected_size; ++i) {
+        const unsigned char ch = static_cast<unsigned char>(inner[i]);
+        if ((ch & 0xC0) != 0x80) {
+            return std::nullopt;
+        }
+        code_point = (code_point << 6) | (ch & 0x3F);
+    }
+
+    return code_point;
+}
+
+static std::string smallestCharTypeForCodePoint(std::uint32_t code_point) {
+    if (code_point <= 0xFF) {
+        return "char8";
+    }
+    if (code_point <= 0xFFFF) {
+        return "char16";
+    }
+    return "char32";
+}
+
 static std::optional<std::string> inferLiteralTypeName(const std::string& text) {
     const std::string literal = trim(text);
     if (literal == "true" || literal == "false") {
         return std::optional<std::string>{"bool"};
     }
 
-    if (literal.size() >= 3 && literal.front() == '\'' && literal.back() == '\'') {
-        return std::optional<std::string>{"char8"};
+    if (const auto code_point = decodedCharLiteralCodePoint(literal); code_point.has_value()) {
+        return std::optional<std::string>{smallestCharTypeForCodePoint(code_point.value())};
     }
 
     if (literal.size() >= 2 && literal.front() == '"' && literal.back() == '"') {

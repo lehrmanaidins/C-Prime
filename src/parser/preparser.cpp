@@ -16,25 +16,34 @@ static bool phraseIntroducesScope(const std::vector<std::shared_ptr<Token>>& tok
         return false;
     }
 
-    if (tokens[0] && (
-        tokens[0]->value == "function"
-        || tokens[0]->value == "template"
-        || tokens[0]->value == "struct"
-        || tokens[0]->value == "enum"
-        || tokens[0]->value == "type"
-        || tokens[0]->value == "if"
-        || tokens[0]->value == "while"
-        || tokens[0]->value == "for"
-        || tokens[0]->value == "else"
+    size_t start = 0;
+    while (start + 1 < tokens.size() && tokens[start] && tokens[start]->value == "@" && tokens[start + 1]) {
+        start += 2;
+    }
+
+    if (start >= tokens.size()) {
+        return false;
+    }
+
+    if (tokens[start] && (
+        tokens[start]->value == "function"
+        || tokens[start]->value == "template"
+        || tokens[start]->value == "struct"
+        || tokens[start]->value == "enum"
+        || tokens[start]->value == "type"
+        || tokens[start]->value == "if"
+        || tokens[start]->value == "while"
+        || tokens[start]->value == "for"
+        || tokens[start]->value == "else"
     )) {
         return true;
     }
 
-    if (tokens[0] && tokens[0]->value == "unsafe") {
-        if (tokens.size() == 1) {
+    if (tokens[start] && tokens[start]->value == "unsafe") {
+        if (tokens.size() == start + 1) {
             return true;
         }
-        return tokens[1] && tokens[1]->value == "function";
+        return tokens[start + 1] && tokens[start + 1]->value == "function";
     }
 
     return false;

@@ -28,6 +28,39 @@ static SemanticTypeRef resolveAliasTypeRef(const SemanticTypeRef& type, CppEmitC
     return resolved;
 }
 
+static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& context);
+
+static void collectUnionMemberTypes(
+    const std::string& type_name,
+    CppEmitContext& context,
+    std::vector<SemanticTypeRef>& members
+) {
+    const auto union_it = context.union_members.find(normalizeTypeName(type_name));
+    if (union_it == context.union_members.end()) {
+        members.push_back(parseTypeRef(type_name));
+        return;
+    }
+
+    for (const auto& member : union_it->second) {
+        collectUnionMemberTypes(member, context, members);
+    }
+}
+
+static std::string emitUnionTypeRef(const std::string& type_name, CppEmitContext& context) {
+    context.required_headers.insert("<variant>");
+
+    std::vector<SemanticTypeRef> members{};
+    collectUnionMemberTypes(type_name, context, members);
+
+    std::string base = "std::variant<";
+    for (size_t i = 0; i < members.size(); ++i) {
+        if (i > 0) base += ", ";
+        base += emitTypeRef(members[i], context);
+    }
+    base += ">";
+    return base;
+}
+
 static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& context) {
     const SemanticTypeRef resolved_type = resolveAliasTypeRef(type, context);
     std::string base;
@@ -41,20 +74,22 @@ static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& cont
         }
         base += ">";
     } else if (resolved_type.kind == SemanticTypeKind::Reference && resolved_type.reference_target) {
-        base = emitTypeRef(*resolved_type.reference_target, context) + "&";
+        context.required_headers.insert("\"src/runtime/c-prime.hpp\"");
+        base = "cprime::reference<" + emitTypeRef(*resolved_type.reference_target, context) + ">";
     } else if (resolved_type.kind == SemanticTypeKind::Pointer && resolved_type.pointer_target) {
-        base = emitTypeRef(*resolved_type.pointer_target, context) + "*";
+        context.required_headers.insert("\"src/runtime/c-prime.hpp\"");
+        base = "cprime::pointer<" + emitTypeRef(*resolved_type.pointer_target, context) + ">";
     } else if (resolved_type.kind == SemanticTypeKind::Function) {
         base = "auto";
+    } else if (context.union_members.find(normalizeTypeName(resolved_type.name)) != context.union_members.end()) {
+        base = emitUnionTypeRef(resolved_type.name, context);
     } else {
         base = mapPrimitiveType(resolved_type.name, context);
     }
 
     for (auto it = resolved_type.array_dimensions.rbegin(); it != resolved_type.array_dimensions.rend(); ++it) {
         if (it->empty()) {
-            context.required_headers.insert("<vector>");
-            base = "std::vector<" + base + ">";
-            continue;
+            throw std::runtime_error("Transpile error: array type '" + resolved_type.name + "[]' requires a length at the use site");
         }
 
         context.required_headers.insert("<array>");

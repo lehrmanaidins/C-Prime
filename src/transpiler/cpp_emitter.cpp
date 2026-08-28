@@ -110,6 +110,7 @@ static void emitStatementList(
 CppEmitResult emitCpp(const SemanticProgram& program) {
     CppEmitResult result{};
     CppEmitContext context{};
+    context.union_members = program.union_members;
     const std::vector<SemanticReturnIR> no_top_level_returns{};
 
     std::string body;
@@ -138,12 +139,12 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
 
         const bool is_main = function.name == "main";
         if (!function.template_parameters.empty()) {
-            appendLine(body, context, "template <typename " + function.template_parameters.front().name);
+            std::string template_line = "template <typename " + function.template_parameters.front().name;
             for (size_t i = 1; i < function.template_parameters.size(); ++i) {
-                body += ", typename " + function.template_parameters[i].name;
+                template_line += ", typename " + function.template_parameters[i].name;
             }
-            body += ">\n";
-            ++context.current_cpp_line;
+            template_line += ">";
+            appendLine(body, context, template_line);
 
             std::string requires_clause;
             for (const auto& parameter : function.template_parameters) {
@@ -161,12 +162,12 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
             }
         }
         const std::string return_type = is_main ? "int" : emitTypeRef(function.return_type, context);
-        std::string signature = return_type + " " + sanitizeIdentifier(function.name) + "(";
+        std::string signature = nodiscardPrefix(return_type, function.is_discardable) + "auto " + sanitizeIdentifier(function.name) + "(";
         for (size_t i = 0; i < function.parameters.size(); ++i) {
             if (i > 0) signature += ", ";
             signature += emitTypeRef(function.parameters[i].type, context) + " " + sanitizeIdentifier(function.parameters[i].name);
         }
-        signature += ")";
+        signature += ") -> " + return_type;
 
         appendLine(body, context, signature + " {");
 

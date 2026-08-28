@@ -1,107 +1,72 @@
 
 // C-Prime implemented feature showcase.
 
-type Distance : primitive uint32;
-type DistancePair : (Distance, Distance);
-type DistanceList : Distance[];
+import "example_import.cprime";
+import "example_native.cpp";
 
-struct Telemetry {
-    Distance altitude;
-    Distance velocity;
-    primitive bool healthy;
-};
+type DomainType : primitive uint32;
+type DomainTuple : (DomainType, DomainType);
+type DomainList : DomainType[];
+type FixedDomainList : DomainType[3];
 
-enum SystemState {
-    STARTING,
-    RUNNING,
-    STOPPED
-};
-
-function next_distance(Distance value) -> Distance {
-    return value + 1;
+struct StructType {
+    DomainType domain_value;
+    primitive bool primitive_value;
 }
 
-function add_u32(primitive uint32 left, primitive uint32 right) -> primitive uint32 {
-    return left + right;
+enum EnumType {
+    ENUM_VALUE_ONE,
+    ENUM_VALUE_TWO,
+    ENUM_VALUE_THREE
 }
 
-function print_distance(Distance value) {
-    print("distance = ");
-    println(value);
+function exampleFunction() {
+    print("This is an example function.");
+}
+
+function examplePrimitiveReturn() -> primitive uint32 {
+    return 42;
+}
+
+function exampleDomainReturn() -> DomainType {
+    return 0;
+}
+
+template <type T>
+function templateParameterAndReturnExample(T first) -> T {
+    return first;
+}
+
+template <type T, type U>
+function templateMultipleTypesExample(T first, U second) -> T {
+    return first;
+}
+
+template <type T : primitive char8 | primitive char16 | primitive char32>
+function boundedTemplateExample(T v) -> void {
+    print(v);
+}
+
+@discard
+function exampleDiscardedFunction() -> primitive uint32 {
+    return 42;
 }
 
 function main() {
-    // Comments, primitive declarations, literals, const-by-default, and explicit const.
-    const primitive uint8 explicit_constant = 1;
-    primitive uint8 unsigned8 = 1;
-    primitive uint16 unsigned16 = 2;
-    primitive uint32 unsigned32 = 3;
-    primitive uint64 unsigned64 = 4;
-    primitive int8 signed8 = 5;
-    primitive int16 signed16 = 6;
-    primitive int32 signed32 = 7;
-    primitive int64 signed64 = 8;
-    primitive float32 decimal32 = 1.5;
-    primitive float64 decimal64 = 2.5;
-    primitive char8 character8 = 'a';
-    primitive char16 character16 = 'b';
-    primitive char32 character32 = 'c';
-    primitive bool enabled = true;
+    println("Welcome to C-Prime!");
 
-    /* Mutable variables and assignment operators. */
-    mutable primitive uint32 counter = 0;
-    counter = counter + 1;
-    counter += 2;
-    counter -= 1;
-    counter *= 3;
-    counter /= 2;
-    counter %= 5;
+    exampleFunction();
 
-    // Arrays, dynamic array aliases, tuples, and domain type initialization.
-    primitive uint8[3] fixed_numbers = {1, 2, 3};
-    primitive uint8[] dynamic_numbers = {4, 5, 6};
-    (primitive uint8, primitive float32) primitive_pair = (1, 2.0);
-    Distance altitude = 1000;
-    Distance velocity = next_distance(altitude);
-    DistancePair limits = (10, 20);
-    DistanceList[3] checkpoints = {100, 200, 300};
-
-    // Structs, struct initializer lists, enums, and enum values.
-    Telemetry telemetry = {
-        altitude = 1000,
-        velocity = 42,
-        healthy = true
-    };
-    SystemState state = SystemState::RUNNING;
-
-    // Expressions and function calls.
-    primitive uint32 total = add_u32(unsigned32, counter);
-    primitive bool has_distance = altitude > 0;
-    primitive bool should_print = has_distance && enabled;
-
-    // Builtin output preserves string literals, including punctuation like C-Prime.
-    print("Hello, ");
-    println("from C-Prime!");
-    print_distance(velocity);
-
-    if (should_print) {
-        println(total);
-    }
-
-    while (counter < 4) {
-        counter += 1;
-        if (counter == 2) {
-            continue;
-        }
-        println(counter);
-        if (counter == 3) {
-            break;
-        }
-    }
-
-    for (mutable primitive uint32 index = 0; index < 3; index += 1) {
-        println(index);
-    }
+    primitive uint32 a = examplePrimitiveReturn();
     
-    unsafe pointer<primitive uint32> raw_pointer = pointer(counter);
+    DomainType b = exampleDomainReturn();
+
+    primitive uint32 c = templateParameterAndReturnExample(123);
+    
+    primitive uint32 d = templateMultipleTypesExample(123, "abc");
+    
+    boundedTemplateExample('a');
+
+    exampleDiscardedFunction();
+
 }
