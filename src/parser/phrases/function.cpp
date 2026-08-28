@@ -27,6 +27,9 @@ struct ParsedFunction : ParsedPhrase {
 
     std::string name;
     std::string return_type;
+    std::string return_value_name;
+    std::string requires_clause;
+    std::string ensures_clause;
     std::vector<std::string> tags;
     std::vector<ParsedTemplateParameter> template_parameters;
     std::vector<std::shared_ptr<ParsedPhrase>> parameters;

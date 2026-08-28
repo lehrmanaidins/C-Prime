@@ -170,6 +170,17 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
         signature += ") -> " + return_type;
 
         appendLine(body, context, signature + " {");
+        if (function.has_requires) {
+            context.required_headers.insert("<stdexcept>");
+            appendLine(body, context, "    if (!(" + emitExpression(function.requires_clause, context) + ")) { throw std::runtime_error(\"function requires clause violated\"); }");
+        }
+
+        const std::string previous_return_value_name = context.current_return_value_name;
+        const bool previous_function_has_ensures = context.current_function_has_ensures;
+        const SemanticExpressionIR previous_function_ensures_clause = context.current_function_ensures_clause;
+        context.current_return_value_name = function.return_value_name;
+        context.current_function_has_ensures = function.has_ensures;
+        context.current_function_ensures_clause = function.ensures_clause;
 
         const CppEmitStatementData function_data{
             function.variable_declarations,
@@ -187,6 +198,10 @@ CppEmitResult emitCpp(const SemanticProgram& program) {
         };
 
         emitStatementList(body, context, function.body_order, function_data, 1);
+
+        context.current_return_value_name = previous_return_value_name;
+        context.current_function_has_ensures = previous_function_has_ensures;
+        context.current_function_ensures_clause = previous_function_ensures_clause;
 
         if (is_main) {
             appendLine(body, context, "    return 0;");

@@ -17,6 +17,17 @@ static void emitMemberFunction(
     }
     signature += ") -> " + return_type;
     appendLine(output, context, indent_str + signature + " {");
+    if (function.has_requires) {
+        context.required_headers.insert("<stdexcept>");
+        appendLine(output, context, indent_str + "    if (!(" + emitExpression(function.requires_clause, context) + ")) { throw std::runtime_error(\"function requires clause violated\"); }");
+    }
+
+    const std::string previous_return_value_name = context.current_return_value_name;
+    const bool previous_function_has_ensures = context.current_function_has_ensures;
+    const SemanticExpressionIR previous_function_ensures_clause = context.current_function_ensures_clause;
+    context.current_return_value_name = function.return_value_name;
+    context.current_function_has_ensures = function.has_ensures;
+    context.current_function_ensures_clause = function.ensures_clause;
 
     const std::vector<SemanticImportIR> no_imports{};
     const CppEmitStatementData function_data{
@@ -35,6 +46,10 @@ static void emitMemberFunction(
     };
 
     emitStatementList(output, context, function.body_order, function_data, indent_str.size() / 4 + 1);
+
+    context.current_return_value_name = previous_return_value_name;
+    context.current_function_has_ensures = previous_function_has_ensures;
+    context.current_function_ensures_clause = previous_function_ensures_clause;
 
     appendLine(output, context, indent_str + "}");
 }

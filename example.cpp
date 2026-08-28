@@ -85,6 +85,13 @@ auto templateUnionExample(T v) -> void {
 auto exampleDiscardedFunction() -> cprime::uint32 {
     return 42;
 }
+[[nodiscard]] auto exampleFunctionContracts(cprime::uint32 a) -> cprime::uint32 {
+    if (!((a > 0))) { throw std::runtime_error("function requires clause violated"); }
+    const cprime::uint32 value = (a * 2);
+    const auto b = value;
+    if (!((b < 100))) { throw std::runtime_error("function ensures clause violated"); }
+    return b;
+}
 [[nodiscard]] auto main() -> int {
     println("Welcome to C-Prime!");
     exampleFunction();

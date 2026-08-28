@@ -1,0 +1,12 @@
+function bounded(primitive uint32 value) -> primitive uint32 result:
+    requires (value > 0);
+    ensures (result < 100);
+{
+    primitive uint32 doubled = value * 2;
+    return doubled;
+}
+
+function main() {
+    primitive uint32 value = bounded(3);
+    println(value);
+}

@@ -28,6 +28,9 @@ struct CppEmitContext {
     std::unordered_set<std::string> struct_types;
     std::unordered_set<std::string> domain_struct_types;
     std::vector<CppSourceMapEntry> source_map;
+    std::string current_return_value_name;
+    bool current_function_has_ensures = false;
+    SemanticExpressionIR current_function_ensures_clause;
     size_t current_cpp_line = 1;
 
     void pushLine(const SourceLocation& loc, const std::string& note) {

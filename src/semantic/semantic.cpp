@@ -164,6 +164,11 @@ struct SemanticTemplateParameterIR {
 struct SemanticFunctionIR {
     std::string name;
     SemanticTypeRef return_type;
+    std::string return_value_name;
+    bool has_requires = false;
+    SemanticExpressionIR requires_clause;
+    bool has_ensures = false;
+    SemanticExpressionIR ensures_clause;
     std::vector<SemanticTemplateParameterIR> template_parameters;
     std::vector<SemanticParameterIR> parameters;
     std::vector<std::string> tags;
@@ -1860,6 +1865,15 @@ static SemanticFunctionIR lowerFunction(
     SemanticFunctionIR function_ir{};
     function_ir.name = phrase->name;
     function_ir.return_type = phrase->return_type.empty() ? parseTypeRef("void") : parseTypeRef(phrase->return_type);
+    function_ir.return_value_name = phrase->return_value_name;
+    function_ir.has_requires = !trim(phrase->requires_clause).empty();
+    function_ir.has_ensures = !trim(phrase->ensures_clause).empty();
+    if (function_ir.has_requires) {
+        function_ir.requires_clause = parseExpressionIR(phrase->requires_clause, phraseStartLocation(phrase));
+    }
+    if (function_ir.has_ensures) {
+        function_ir.ensures_clause = parseExpressionIR(phrase->ensures_clause, phraseStartLocation(phrase));
+    }
     function_ir.tags = phrase->tags;
     function_ir.is_discardable = std::find(function_ir.tags.begin(), function_ir.tags.end(), "discard") != function_ir.tags.end();
     for (const auto& parameter : phrase->template_parameters) {

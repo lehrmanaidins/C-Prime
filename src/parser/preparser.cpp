@@ -49,6 +49,19 @@ static bool phraseIntroducesScope(const std::vector<std::shared_ptr<Token>>& tok
     return false;
 }
 
+static bool isPendingFunctionContractHeader(const std::vector<std::shared_ptr<Token>>& tokens) {
+    bool has_function = false;
+    bool has_contract_clause = false;
+    for (const auto& token : tokens) {
+        if (!token) {
+            continue;
+        }
+        has_function = has_function || token->value == "function";
+        has_contract_clause = has_contract_clause || token->value == "requires" || token->value == "ensures";
+    }
+    return has_function && has_contract_clause;
+}
+
 Phrases preparseTokens(const Tokens& tokens) {
     Phrases phrases{};
     std::vector<std::shared_ptr<Phrase>> scope_stack{};
@@ -130,6 +143,11 @@ Phrases preparseTokens(const Tokens& tokens) {
 
         if (value == ";") {
             if (expression_brace_depth > 0 || paren_depth > 0) {
+                current_tokens.push_back(token);
+                continue;
+            }
+
+            if (isPendingFunctionContractHeader(current_tokens)) {
                 current_tokens.push_back(token);
                 continue;
             }

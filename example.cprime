@@ -57,6 +57,14 @@ function exampleDiscardedFunction() -> primitive uint32 {
     return 42;
 }
 
+function exampleFunctionContracts(primitive uint32 a) -> primitive uint32 b :
+    requires (a > 0);
+    ensures (b < 100);
+{
+    primitive uint32 value = a * 2;
+    return value;
+}
+
 function main() {
     println("Welcome to C-Prime!");
 

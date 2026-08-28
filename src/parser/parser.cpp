@@ -687,7 +687,55 @@ static std::string parseFunctionReturnType(const Tokens& tokens, size_t close_pa
         return "";
     }
 
-    return joinTokenRange(tokens, close_paren + 2, tokens.size());
+    size_t return_end = close_paren + 2;
+    while (return_end < tokens.size() && tokens[return_end]
+        && tokens[return_end]->value != ":"
+        && tokens[return_end]->value != "requires"
+        && tokens[return_end]->value != "ensures") {
+        ++return_end;
+    }
+
+    if (return_end > close_paren + 3 && tokens[return_end - 1]
+        && tokens[return_end - 1]->type == TokenCatagory::Identifier) {
+        --return_end;
+    }
+
+    return joinTokenRange(tokens, close_paren + 2, return_end);
+}
+
+static std::string parseFunctionReturnValueName(const Tokens& tokens, size_t close_paren) {
+    if (close_paren + 1 >= tokens.size() || !tokens[close_paren + 1] || tokens[close_paren + 1]->value != "->") {
+        return "";
+    }
+
+    size_t return_end = close_paren + 2;
+    while (return_end < tokens.size() && tokens[return_end]
+        && tokens[return_end]->value != ":"
+        && tokens[return_end]->value != "requires"
+        && tokens[return_end]->value != "ensures") {
+        ++return_end;
+    }
+
+    if (return_end > close_paren + 3 && tokens[return_end - 1]
+        && tokens[return_end - 1]->type == TokenCatagory::Identifier) {
+        return tokens[return_end - 1]->value;
+    }
+
+    return "";
+}
+
+static std::string parseFunctionContractClause(const Tokens& tokens, const std::string& keyword) {
+    const size_t start = findTokenIndex(tokens, keyword);
+    if (start == tokens.size()) {
+        return "";
+    }
+
+    size_t end = start + 1;
+    while (end < tokens.size() && tokens[end] && tokens[end]->value != ";") {
+        ++end;
+    }
+
+    return joinTokenRange(tokens, start + 1, end);
 }
 
 static std::string parseParenthesizedContent(const Tokens& tokens) {
@@ -792,6 +840,9 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
         const std::string return_type = parseFunctionReturnType(phrase->tokens, close_paren);
         const size_t function_index = findTokenIndex(phrase->tokens, "function");
         auto function = std::make_shared<ParsedFunction>(function_name, return_type, parseTemplateParameters(phrase->tokens, function_index), phrase);
+        function->return_value_name = parseFunctionReturnValueName(phrase->tokens, close_paren);
+        function->requires_clause = parseFunctionContractClause(phrase->tokens, "requires");
+        function->ensures_clause = parseFunctionContractClause(phrase->tokens, "ensures");
         const size_t prefix_start = functionPrefixStart(phrase->tokens);
         function->tags = collectLeadingFunctionTags(phrase->tokens);
         function->is_unsafe = prefix_start < phrase->tokens.size() && phrase->tokens[prefix_start] && phrase->tokens[prefix_start]->value == "unsafe";
