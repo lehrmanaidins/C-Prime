@@ -60,6 +60,8 @@ static void emitTypeDefinitionStatement(
     const SemanticTypeDefinitionIR& type_def,
     const std::string& indent_str
 ) {
+    const bool is_generic = !type_def.template_parameters.empty();
+
     bool has_template_array_dim = false;
     for (const auto& dim : type_def.base_type.array_dimensions) {
         if (dim.empty()) {
@@ -68,8 +70,13 @@ static void emitTypeDefinitionStatement(
         }
     }
 
+    if (is_generic && has_template_array_dim) {
+        throw std::runtime_error("Transpile error: generic type '" + type_def.name
+            + "' needs a fixed array length (unsized '[]' is not supported for generic types)");
+    }
+
     const bool is_simple_type_alias = !type_def.has_requires && !type_def.has_ensures && type_def.member_functions.empty();
-    if (is_simple_type_alias && has_template_array_dim) {
+    if (!is_generic && is_simple_type_alias && has_template_array_dim) {
         context.type_aliases[type_def.name] = type_def.base_type;
         context.pushLine(type_def.location, "type");
         return;
@@ -82,12 +89,18 @@ static void emitTypeDefinitionStatement(
 
     const std::string base_type_str = emitTypeRef(type_def.base_type, context);
     const std::string name = sanitizeIdentifier(type_def.name);
+    // A distinctive name so the converting-constructor's own template parameter
+    // never collides with one of the type's generic parameters.
+    const std::string init_param = "CPrimeInit";
 
+    if (is_generic) {
+        appendLine(output, context, indent_str + emitGenericParameterList(type_def.template_parameters));
+    }
     appendLine(output, context, indent_str + "struct " + name + " {");
     appendLine(output, context, indent_str + "    " + base_type_str + " value;");
     appendLine(output, context, "");
-    appendLine(output, context, indent_str + "    template <typename T>");
-    appendLine(output, context, indent_str + "    [[nodiscard]] " + name + "(T&& value_arg) : value(std::forward<T>(value_arg)) {");
+    appendLine(output, context, indent_str + "    template <typename " + init_param + ">");
+    appendLine(output, context, indent_str + "    [[nodiscard]] " + name + "(" + init_param + "&& value_arg) : value(std::forward<" + init_param + ">(value_arg)) {");
     if (type_def.has_requires) {
         appendLine(output, context, indent_str + "        if (!(" + emitExpression(type_def.requires_clause, context) + ")) { throw std::runtime_error(\"" + type_def.name + ": requires clause violated\"); }");
     }
@@ -96,8 +109,8 @@ static void emitTypeDefinitionStatement(
     }
     appendLine(output, context, indent_str + "    }");
     appendLine(output, context, "");
-    appendLine(output, context, indent_str + "    template <typename T>");
-    appendLine(output, context, indent_str + "    [[nodiscard]] " + name + "& operator=(T&& value_arg) { *this = " + name + "(std::forward<T>(value_arg)); return *this; }");
+    appendLine(output, context, indent_str + "    template <typename " + init_param + ">");
+    appendLine(output, context, indent_str + "    [[nodiscard]] " + name + "& operator=(" + init_param + "&& value_arg) { *this = " + name + "(std::forward<" + init_param + ">(value_arg)); return *this; }");
     appendLine(output, context, "");
     appendLine(output, context, indent_str + "    [[nodiscard]] operator " + base_type_str + "() const { return value; }");
 

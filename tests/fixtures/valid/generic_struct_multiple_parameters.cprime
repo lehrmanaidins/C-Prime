@@ -1,0 +1,13 @@
+type DomainType : primitive uint32;
+
+template <type K, type V>
+struct Entry {
+    K key;
+    V val;
+}
+
+function main() {
+    Entry<DomainType, primitive bool> entry = { key = 1, val = true };
+    primitive bool flag = entry.val;
+    println(flag);
+}

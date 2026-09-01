@@ -1,0 +1,6 @@
+template <type T>
+type Named : T;
+
+function main() {
+    Named<primitive uint32> value = 42;
+}

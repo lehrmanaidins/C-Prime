@@ -1,0 +1,14 @@
+function readThrough(reference<primitive uint32> value) -> primitive uint32 {
+    return value;
+}
+
+function main() {
+    mutable primitive uint32 a = 10;
+
+    reference<primitive uint32> alias = reference(a);
+    primitive uint32 copied = readThrough(alias);
+    println(copied);
+
+    reference<mutable primitive uint32> writable = reference(a);
+    println(writable);
+}

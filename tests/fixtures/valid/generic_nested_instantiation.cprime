@@ -1,0 +1,11 @@
+template <type T>
+struct Box {
+    T value;
+}
+
+function main() {
+    Box<primitive uint32> inner = { value = 9 };
+    Box<Box<primitive uint32>> outer = { value = inner };
+    primitive uint32 deep = outer.value.value;
+    println(deep);
+}

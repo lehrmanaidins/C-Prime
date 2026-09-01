@@ -115,6 +115,15 @@ static bool isDeclarationStarter(const std::string& value) {
         || value == "import";
 }
 
+static bool looksLikeIdentifier(const std::string& value) {
+    if (value.empty() || !(std::isalpha(static_cast<unsigned char>(value.front())) || value.front() == '_')) {
+        return false;
+    }
+    return std::all_of(value.begin(), value.end(), [](char ch) {
+        return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_';
+    });
+}
+
 static std::string findMissingSemicolonBeforeToken(const Tokens& tokens) {
     int paren_depth = 0;
     int bracket_depth = 0;
@@ -146,8 +155,7 @@ static std::string findMissingSemicolonBeforeToken(const Tokens& tokens) {
                 --brace_depth;
             }
         } else if (value == "<"
-            && (angle_depth > 0 || (i > 0 && tokens[i - 1]
-                && (tokens[i - 1]->value == "reference" || tokens[i - 1]->value == "pointer")))) {
+            && (angle_depth > 0 || (i > 0 && tokens[i - 1] && looksLikeIdentifier(tokens[i - 1]->value)))) {
             ++angle_depth;
         } else if (value == ">" && angle_depth > 0) {
             --angle_depth;
@@ -224,6 +232,41 @@ static size_t findTokenIndex(const Tokens& tokens, const std::string& value) {
         }
     }
     return tokens.size();
+}
+
+static size_t findTokenIndexFrom(const Tokens& tokens, const std::string& value, size_t from) {
+    for (size_t i = from; i < tokens.size(); ++i) {
+        if (tokens[i] && tokens[i]->value == value) {
+            return i;
+        }
+    }
+    return tokens.size();
+}
+
+// If the phrase begins with a `template < ... >` prefix, returns the index of
+// the token immediately after the matching `>` (where the `struct` / `type`
+// keyword is expected). Returns 0 when there is no template prefix.
+static size_t templatePrefixEnd(const Tokens& tokens) {
+    if (tokens.size() < 4 || !tokens[0] || tokens[0]->value != "template" || !tokens[1] || tokens[1]->value != "<") {
+        return 0;
+    }
+
+    size_t angle_depth = 0;
+    for (size_t i = 1; i < tokens.size(); ++i) {
+        if (!tokens[i]) {
+            continue;
+        }
+        if (tokens[i]->value == "<") {
+            ++angle_depth;
+        } else if (tokens[i]->value == ">") {
+            --angle_depth;
+            if (angle_depth == 0) {
+                return i + 1;
+            }
+        }
+    }
+
+    return 0;
 }
 
 static bool isAssignmentOperator(const std::string& value) {
@@ -358,11 +401,22 @@ static std::vector<ParsedTemplateParameter> parseTemplateParameters(const Tokens
 }
 
 static bool isTypeDefinitionPhrase(const std::shared_ptr<Phrase>& phrase) {
-    return phrase && phrase->tokens.size() >= 4 && phrase->tokens[0] && phrase->tokens[0]->value == "type" && hasTokenValue(phrase->tokens, ":");
+    if (!phrase) {
+        return false;
+    }
+    const size_t keyword = templatePrefixEnd(phrase->tokens);
+    return phrase->tokens.size() >= keyword + 4 && phrase->tokens[keyword]
+        && phrase->tokens[keyword]->value == "type"
+        && findTokenIndexFrom(phrase->tokens, ":", keyword + 2) != phrase->tokens.size();
 }
 
 static bool isStructDefinitionPhrase(const std::shared_ptr<Phrase>& phrase) {
-    return phrase && phrase->tokens.size() >= 2 && phrase->tokens[0] && phrase->tokens[0]->value == "struct";
+    if (!phrase) {
+        return false;
+    }
+    const size_t keyword = templatePrefixEnd(phrase->tokens);
+    return phrase->tokens.size() >= keyword + 2 && phrase->tokens[keyword]
+        && phrase->tokens[keyword]->value == "struct";
 }
 
 static bool isEnumDefinitionPhrase(const std::shared_ptr<Phrase>& phrase) {
@@ -855,13 +909,19 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
     } else if (isKeywordPhrase(phrase, "ensures")) {
         parsed_phrase = std::make_shared<ParsedEnsuresClause>(joinTokenRange(phrase->tokens, 1, phrase->tokens.size()), phrase);
     } else if (isTypeDefinitionPhrase(phrase)) {
-        const std::string type_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
-        const size_t colon_index = findTokenIndex(phrase->tokens, ":");
+        const size_t keyword = templatePrefixEnd(phrase->tokens);
+        const std::string type_name = phrase->tokens[keyword + 1] ? phrase->tokens[keyword + 1]->value : "";
+        const size_t colon_index = findTokenIndexFrom(phrase->tokens, ":", keyword + 2);
         const std::string base_type = joinTokenRange(phrase->tokens, colon_index + 1, phrase->tokens.size());
-        parsed_phrase = std::make_shared<ParsedTypeDefinition>(type_name, base_type, phrase);
+        auto type_definition = std::make_shared<ParsedTypeDefinition>(type_name, base_type, phrase);
+        type_definition->template_parameters = parseTemplateParameters(phrase->tokens, keyword);
+        parsed_phrase = type_definition;
     } else if (isStructDefinitionPhrase(phrase)) {
-        const std::string struct_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
-        parsed_phrase = std::make_shared<ParsedStructDefinition>(struct_name, phrase);
+        const size_t keyword = templatePrefixEnd(phrase->tokens);
+        const std::string struct_name = phrase->tokens[keyword + 1] ? phrase->tokens[keyword + 1]->value : "";
+        auto struct_definition = std::make_shared<ParsedStructDefinition>(struct_name, phrase);
+        struct_definition->template_parameters = parseTemplateParameters(phrase->tokens, keyword);
+        parsed_phrase = struct_definition;
     } else if (isEnumDefinitionPhrase(phrase)) {
         const std::string enum_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
         parsed_phrase = std::make_shared<ParsedEnumDefinition>(enum_name, phrase);

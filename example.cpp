@@ -4,42 +4,43 @@
 #include <tuple>
 #include "src/runtime/c-prime.hpp"
 #include <utility>
+#include "src/runtime/c-prime-types.hpp"
 #include <stdexcept>
 
 #include "example_native.cpp"
 struct DomainType {
     cprime::uint32 value;
 
-    template <typename T>
-    [[nodiscard]] DomainType(T&& value_arg) : value(std::forward<T>(value_arg)) {
+    template <typename CPrimeInit>
+    [[nodiscard]] DomainType(CPrimeInit&& value_arg) : value(std::forward<CPrimeInit>(value_arg)) {
     }
 
-    template <typename T>
-    [[nodiscard]] DomainType& operator=(T&& value_arg) { *this = DomainType(std::forward<T>(value_arg)); return *this; }
+    template <typename CPrimeInit>
+    [[nodiscard]] DomainType& operator=(CPrimeInit&& value_arg) { *this = DomainType(std::forward<CPrimeInit>(value_arg)); return *this; }
 
     [[nodiscard]] operator cprime::uint32() const { return value; }
 };
 struct DomainTuple {
     std::tuple<DomainType, DomainType> value;
 
-    template <typename T>
-    [[nodiscard]] DomainTuple(T&& value_arg) : value(std::forward<T>(value_arg)) {
+    template <typename CPrimeInit>
+    [[nodiscard]] DomainTuple(CPrimeInit&& value_arg) : value(std::forward<CPrimeInit>(value_arg)) {
     }
 
-    template <typename T>
-    [[nodiscard]] DomainTuple& operator=(T&& value_arg) { *this = DomainTuple(std::forward<T>(value_arg)); return *this; }
+    template <typename CPrimeInit>
+    [[nodiscard]] DomainTuple& operator=(CPrimeInit&& value_arg) { *this = DomainTuple(std::forward<CPrimeInit>(value_arg)); return *this; }
 
     [[nodiscard]] operator std::tuple<DomainType, DomainType>() const { return value; }
 };
 struct FixedDomainList {
     std::array<DomainType, 3> value;
 
-    template <typename T>
-    [[nodiscard]] FixedDomainList(T&& value_arg) : value(std::forward<T>(value_arg)) {
+    template <typename CPrimeInit>
+    [[nodiscard]] FixedDomainList(CPrimeInit&& value_arg) : value(std::forward<CPrimeInit>(value_arg)) {
     }
 
-    template <typename T>
-    [[nodiscard]] FixedDomainList& operator=(T&& value_arg) { *this = FixedDomainList(std::forward<T>(value_arg)); return *this; }
+    template <typename CPrimeInit>
+    [[nodiscard]] FixedDomainList& operator=(CPrimeInit&& value_arg) { *this = FixedDomainList(std::forward<CPrimeInit>(value_arg)); return *this; }
 
     [[nodiscard]] operator std::array<DomainType, 3>() const { return value; }
 };
@@ -92,6 +93,12 @@ auto exampleDiscardedFunction() -> cprime::uint32 {
     if (!((b < 100))) { throw std::runtime_error("function ensures clause violated"); }
     return b;
 }
+auto examplePassByReference(cprime::reference<const cprime::uint32> value) -> void {
+    print(value);
+}
+[[nodiscard]] auto exampleReturnByReference(cprime::reference<const cprime::uint32> value) -> cprime::reference<const cprime::uint32> {
+    return value;
+}
 [[nodiscard]] auto main() -> int {
     println("Welcome to C-Prime!");
     exampleFunction();
@@ -100,7 +107,10 @@ auto exampleDiscardedFunction() -> cprime::uint32 {
     const cprime::uint32 c = templateParameterAndReturnExample(123);
     const cprime::uint32 d = templateMultipleTypesExample(123, "abc");
     boundedTemplateExample(static_cast<cprime::char8>(97));
-    exampleDiscardedFunction();
     templateUnionExample(static_cast<cprime::char8>(97));
+    exampleDiscardedFunction();
+    const cprime::uint32 e = exampleFunctionContracts(10);
+    const cprime::reference<const cprime::uint32> f = cprime::reference(a);
+    const cprime::reference<const cprime::uint32> g = exampleReturnByReference(f);
     return 0;
 }

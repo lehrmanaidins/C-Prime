@@ -1,0 +1,9 @@
+unsafe function danglingPointer() -> pointer<primitive uint32> {
+    unsafe {
+        primitive uint32 local = 42;
+        return pointer(local);
+    }
+}
+
+function main() {
+}

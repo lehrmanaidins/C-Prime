@@ -1,0 +1,20 @@
+type DomainType : primitive uint32;
+
+template <type T>
+struct Box {
+    T value;
+}
+
+function unwrap(Box<primitive uint32> boxed) -> primitive uint32 {
+    return boxed.value;
+}
+
+function main() {
+    Box<DomainType> domain_box = { value = 7 };
+    DomainType inner = domain_box.value;
+    println(inner);
+
+    Box<primitive uint32> number_box = { value = 5 };
+    primitive uint32 extracted = unwrap(number_box);
+    println(extracted);
+}

@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <array>
@@ -29,12 +30,6 @@ namespace cprime {
 
     template <typename... Elements>
     using tuple = std::tuple<Elements...>;
-
-    template <typename T>
-    using reference = T&;
-
-    template <typename T>
-    using pointer = T*;
 
     inline void print_char_code_point(std::uint32_t code_point) {
         if (code_point <= 0x7F) {
@@ -70,16 +65,6 @@ namespace cprime {
     void print_value(const T& value) {
         std::cout << value;
     }
-}
-
-template <typename T>
-cprime::pointer<T> pointer(T& value) {
-    return &value;
-}
-
-template <typename T>
-cprime::reference<T> reference(T& value) {
-    return value;
 }
 
 template <typename... Args>

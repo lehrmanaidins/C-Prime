@@ -53,8 +53,13 @@ struct SemanticAssignmentIR {
 
 struct SemanticFunctionIR;
 
+struct SemanticGenericParameterIR {
+    std::string name;
+};
+
 struct SemanticTypeDefinitionIR {
     std::string name;
+    std::vector<SemanticGenericParameterIR> template_parameters;
     SemanticTypeRef base_type;
     SourceLocation location;
     bool has_requires = false;
@@ -72,6 +77,7 @@ struct SemanticStructFieldIR {
 
 struct SemanticStructDefinitionIR {
     std::string name;
+    std::vector<SemanticGenericParameterIR> template_parameters;
     std::vector<SemanticStructFieldIR> fields;
     SourceLocation location;
 };
@@ -219,11 +225,13 @@ enum class TypeSymbolKind {
 struct TypeSymbol {
     TypeSymbolKind kind;
     std::string underlying;
+    size_t template_parameter_count = 0;
 };
 
 struct VariableSymbol {
     std::string type_name;
     bool is_mutable;
+    bool is_parameter = false;
 };
 
 struct TemplateTypeConstraint {
@@ -299,6 +307,30 @@ static std::runtime_error semanticError(const std::shared_ptr<ParsedPhrase>& phr
     return std::runtime_error("Semantic error at " + phraseLocation(phrase) + ": " + message);
 }
 
+// For a generic instantiation such as `Box<DomainType>`, returns the bare type
+// name (`Box`) so it can be looked up in the symbol table. `reference<...>`,
+// `pointer<...>` and `function<...>` keep their full spelling because they are
+// handled as dedicated type kinds elsewhere.
+static std::string stripGenericArguments(const std::string& type_name) {
+    const size_t open = type_name.find('<');
+    if (open == std::string::npos) {
+        return type_name;
+    }
+
+    const std::string head = trim(type_name.substr(0, open));
+    if (head.empty() || head == "reference" || head == "pointer" || head == "function") {
+        return type_name;
+    }
+
+    for (char ch : head) {
+        if (!std::isalnum(static_cast<unsigned char>(ch)) && ch != '_') {
+            return type_name;
+        }
+    }
+
+    return head;
+}
+
 static bool isKnownType(const SemanticSymbolTable& symbols, const std::string& raw_type) {
     const std::string type = normalizeTypeName(raw_type);
     if (type.empty()) {
@@ -347,6 +379,21 @@ static bool isKnownTypeRef(
     }
 
     const std::string name = normalizeTypeName(type_ref.name);
+
+    if (!type_ref.generic_arguments.empty()) {
+        const auto generic_it = symbols.known_types.find(name);
+        if (generic_it == symbols.known_types.end()
+            || generic_it->second.template_parameter_count != type_ref.generic_arguments.size()) {
+            return false;
+        }
+        for (const auto& argument : type_ref.generic_arguments) {
+            if (!isKnownTypeRef(symbols, argument, template_type_parameters)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     return symbols.known_types.find(name) != symbols.known_types.end()
         || template_type_parameters.find(name) != template_type_parameters.end();
 }
@@ -409,7 +456,8 @@ static void declareVariable(
     const std::string& name,
     const std::string& type_name,
     bool is_mutable,
-    const std::shared_ptr<ParsedPhrase>& phrase
+    const std::shared_ptr<ParsedPhrase>& phrase,
+    bool is_parameter = false
 ) {
     if (context.variable_scopes.empty()) {
         enterScope(context);
@@ -420,7 +468,7 @@ static void declareVariable(
         throw semanticError(phrase, "duplicate declaration of variable '" + name + "' in phrase: " + joinPhraseText(phrase));
     }
 
-    scope.insert({name, VariableSymbol{type_name, is_mutable}});
+    scope.insert({name, VariableSymbol{type_name, is_mutable, is_parameter}});
 }
 
 static void collectSymbolsFromPhrase(const std::shared_ptr<ParsedPhrase>& phrase, SemanticSymbolTable& symbols);
@@ -488,7 +536,7 @@ static void collectSymbolsFromPhrase(const std::shared_ptr<ParsedPhrase>& phrase
                 registerTypeSymbol(
                     phrase,
                     type_def->name,
-                    TypeSymbol{TypeSymbolKind::Domain, trim(type_def->base_type)},
+                    TypeSymbol{TypeSymbolKind::Domain, trim(type_def->base_type), type_def->template_parameters.size()},
                     symbols
                 );
 
@@ -511,7 +559,7 @@ static void collectSymbolsFromPhrase(const std::shared_ptr<ParsedPhrase>& phrase
                 registerTypeSymbol(
                     phrase,
                     struct_def->name,
-                    TypeSymbol{TypeSymbolKind::Struct, ""},
+                    TypeSymbol{TypeSymbolKind::Struct, "", struct_def->template_parameters.size()},
                     symbols
                 );
             }
@@ -618,10 +666,11 @@ static std::optional<std::string> inferExpressionTypeName(
         case SemanticExpressionKind::InitializerList:
             return std::optional<std::string>{"init_list"};
         case SemanticExpressionKind::Call:
-            if (expression.operator_symbol == "pointer" && expression.children.size() == 1) {
+            if ((expression.operator_symbol == "pointer" || expression.operator_symbol == "reference")
+                && expression.children.size() == 1) {
                 const std::optional<std::string> argument_type = inferExpressionTypeName(expression.children.front(), context);
                 return argument_type.has_value()
-                    ? std::optional<std::string>{"pointer<" + argument_type.value() + ">"}
+                    ? std::optional<std::string>{expression.operator_symbol + "<" + argument_type.value() + ">"}
                     : std::nullopt;
             }
             if (context.symbols.function_return_types.find(expression.operator_symbol) != context.symbols.function_return_types.end()) {
@@ -782,6 +831,10 @@ static void validateExpression(
             if (expression.children.size() != 1 || !isAssignableExpression(expression.children.front())) {
                 throw semanticError(phrase, "'pointer()' expects a single variable argument");
             }
+        } else if (expression.operator_symbol == "reference") {
+            if (expression.children.size() != 1 || !isAssignableExpression(expression.children.front())) {
+                throw semanticError(phrase, "'reference()' expects a single variable argument");
+            }
         } else if (context.symbols.known_functions.find(expression.operator_symbol) == context.symbols.known_functions.end()) {
             throw semanticError(phrase, "unknown function '" + expression.operator_symbol + "'");
         } else if (context.symbols.variadic_functions.find(expression.operator_symbol) == context.symbols.variadic_functions.end()) {
@@ -804,7 +857,7 @@ static void validateAssignmentCompatibility(
     const SemanticExpressionIR& expression,
     ValidationContext& context
 ) {
-    const std::string normalized_target = normalizeTypeName(target_type);
+    const std::string normalized_target = stripGenericArguments(normalizeTypeName(target_type));
     auto target_it = context.symbols.known_types.find(normalized_target);
     if (target_it == context.symbols.known_types.end()) {
         return;
@@ -818,7 +871,7 @@ static void validateAssignmentCompatibility(
             return;
         }
 
-        const std::string source_type = normalizeTypeName(expression_type.value());
+        const std::string source_type = stripGenericArguments(normalizeTypeName(expression_type.value()));
         if (source_type == normalized_target) {
             return;
         }
@@ -850,7 +903,7 @@ static void validateAssignmentCompatibility(
             return;
         }
 
-        const std::string source_type = normalizeTypeName(expression_type.value());
+        const std::string source_type = stripGenericArguments(normalizeTypeName(expression_type.value()));
         auto source_it = context.symbols.known_types.find(source_type);
         if (source_it != context.symbols.known_types.end() && source_it->second.kind == TypeSymbolKind::Domain) {
             throw semanticError(
@@ -1019,12 +1072,34 @@ static void analyzeTypeDefinition(
         return;
     }
 
-    if (!isKnownTypeRefString(context.symbols, type_phrase->base_type)) {
+    std::vector<std::string> declared_template_parameters;
+    for (const auto& parameter : type_phrase->template_parameters) {
+        if (context.symbols.known_types.find(parameter.name) != context.symbols.known_types.end()
+            || !context.template_type_parameters.insert(parameter.name).second) {
+            throw semanticError(type_phrase, "duplicate template type parameter '" + parameter.name + "'");
+        }
+        declared_template_parameters.push_back(parameter.name);
+    }
+    const auto release_template_parameters = [&]() {
+        for (const auto& name : declared_template_parameters) {
+            context.template_type_parameters.erase(name);
+        }
+    };
+
+    if (!isKnownTypeRefString(context.symbols, type_phrase->base_type, context.template_type_parameters)) {
+        release_template_parameters();
         throw semanticError(type_phrase, "unknown base type '" + type_phrase->base_type + "' in phrase: " + joinPhraseText(type_phrase));
+    }
+
+    if (!type_phrase->template_parameters.empty()
+        && (!type_phrase->nested_phrases.empty())) {
+        release_template_parameters();
+        throw semanticError(type_phrase, "generic type '" + type_phrase->name + "' cannot declare contracts or member functions");
     }
 
     const bool has_body = !type_phrase->nested_phrases.empty();
     if (!has_body) {
+        release_template_parameters();
         return;
     }
 
@@ -1052,6 +1127,7 @@ static void analyzeTypeDefinition(
     }
 
     leaveScope(context);
+    release_template_parameters();
 }
 
 static void analyzeStructDefinition(
@@ -1060,6 +1136,15 @@ static void analyzeStructDefinition(
 ) {
     if (!struct_phrase) {
         return;
+    }
+
+    std::vector<std::string> declared_template_parameters;
+    for (const auto& parameter : struct_phrase->template_parameters) {
+        if (context.symbols.known_types.find(parameter.name) != context.symbols.known_types.end()
+            || !context.template_type_parameters.insert(parameter.name).second) {
+            throw semanticError(struct_phrase, "duplicate template type parameter '" + parameter.name + "'");
+        }
+        declared_template_parameters.push_back(parameter.name);
     }
 
     std::unordered_set<std::string> field_names{};
@@ -1078,7 +1163,7 @@ static void analyzeStructDefinition(
             continue;
         }
 
-        if (!isKnownTypeRefString(context.symbols, field->type_name)) {
+        if (!isKnownTypeRefString(context.symbols, field->type_name, context.template_type_parameters)) {
             throw semanticError(field, "unknown struct field type '" + field->type_name + "' in phrase: " + joinPhraseText(field));
         }
 
@@ -1087,6 +1172,10 @@ static void analyzeStructDefinition(
         }
 
         field_names.insert(field->name);
+    }
+
+    for (const auto& name : declared_template_parameters) {
+        context.template_type_parameters.erase(name);
     }
 }
 
@@ -1195,7 +1284,8 @@ static void analyzeParameterDeclaration(
         parameter_phrase->name,
         parameter_type,
         false,
-        parameter_phrase
+        parameter_phrase,
+        true
     );
 }
 
@@ -1265,6 +1355,64 @@ static void analyzeCallStatement(
     validateTemplateCallConstraints(call_phrase, call_phrase->name, arguments, context);
 }
 
+// Enforces that a function returning a reference or pointer only ever hands
+// back storage that outlives the call. Concretely: the returned reference /
+// pointer must alias one of the function's own reference or pointer
+// parameters (or a subobject of one). Returning a reference or pointer to a
+// locally scoped variable is rejected, because the storage dies when the
+// function returns and the caller would be left with a dangling alias.
+static void validateReturnedReferenceLifetime(
+    const std::shared_ptr<ParsedPhrase>& return_phrase,
+    const SemanticExpressionIR& expression,
+    ValidationContext& context
+) {
+    const SemanticTypeRef return_type = parseTypeRef(context.current_function_return_type);
+    const bool returns_pointer = return_type.kind == SemanticTypeKind::Pointer;
+    const bool returns_reference = return_type.kind == SemanticTypeKind::Reference;
+    if (!returns_pointer && !returns_reference) {
+        return;
+    }
+
+    // Unwrap an explicit `reference(x)` / `pointer(x)` constructor so we look
+    // at the storage being aliased rather than the wrapper expression.
+    const SemanticExpressionIR* aliased = &expression;
+    if (expression.kind == SemanticExpressionKind::Call
+        && (expression.operator_symbol == "reference" || expression.operator_symbol == "pointer")
+        && expression.children.size() == 1) {
+        aliased = &expression.children.front();
+    }
+
+    // A call that yields a reference / pointer (e.g. forwarding another
+    // function's result) cannot be resolved to a single local here; those
+    // callees are checked in their own right, so allow it through.
+    const std::optional<std::string> root_identifier = expressionRootIdentifier(*aliased);
+    if (!root_identifier.has_value()) {
+        return;
+    }
+
+    const VariableSymbol* symbol = lookupVariable(context, root_identifier.value());
+    if (symbol == nullptr) {
+        return;
+    }
+
+    const SemanticTypeRef symbol_type = parseTypeRef(symbol->type_name);
+    const bool aliases_reference_parameter =
+        symbol->is_parameter
+        && (symbol_type.kind == SemanticTypeKind::Reference || symbol_type.kind == SemanticTypeKind::Pointer);
+    if (aliases_reference_parameter) {
+        return;
+    }
+
+    const std::string kind_word = returns_pointer ? "pointer" : "reference";
+    throw semanticError(
+        return_phrase,
+        "cannot return a " + kind_word + " to '" + root_identifier.value()
+            + "': it is a locally scoped variable and would dangle after the function returns; "
+              "a function may only return a " + kind_word
+            + " that aliases one of its own reference or pointer parameters"
+    );
+}
+
 static void analyzeReturnStatement(
     const std::shared_ptr<ParsedReturnStatement>& return_phrase,
     ValidationContext& context
@@ -1290,6 +1438,7 @@ static void analyzeReturnStatement(
     SemanticExpressionIR expression = parseExpressionIR(returned_expression, phraseStartLocation(return_phrase));
     validateExpression(return_phrase, expression, context);
     validateAssignmentCompatibility(return_phrase, expected_type, expression, context);
+    validateReturnedReferenceLifetime(return_phrase, expression, context);
 }
 
 static void analyzeUnknown(const std::shared_ptr<ParsedPhrase>& phrase) {
@@ -1496,6 +1645,9 @@ static void renameIdentifierInFunction(SemanticFunctionIR& function_ir, const st
 static SemanticTypeDefinitionIR lowerTypeDefinition(const std::shared_ptr<ParsedTypeDefinition>& phrase, const SemanticSymbolTable& symbols) {
     SemanticTypeDefinitionIR node{};
     node.name = phrase->name;
+    for (const auto& parameter : phrase->template_parameters) {
+        node.template_parameters.push_back(SemanticGenericParameterIR{parameter.name});
+    }
     node.base_type = parseTypeRef(phrase->base_type);
     node.location = phraseStartLocation(phrase);
 
@@ -1540,6 +1692,9 @@ static SemanticTypeDefinitionIR lowerTypeDefinition(const std::shared_ptr<Parsed
 static SemanticStructDefinitionIR lowerStructDefinition(const std::shared_ptr<ParsedStructDefinition>& phrase) {
     SemanticStructDefinitionIR node{};
     node.name = phrase->name;
+    for (const auto& parameter : phrase->template_parameters) {
+        node.template_parameters.push_back(SemanticGenericParameterIR{parameter.name});
+    }
     node.location = phraseStartLocation(phrase);
 
     for (const auto& nested : phrase->nested_phrases) {

@@ -87,7 +87,6 @@
 &= // Bitwise AND assignment
 |= // Bitwise OR assignment
 ^= // Bitwise XOR assignment
-~= // Bitwise NOT assignment
 <<= // Left shift assignment
 >>= // Right shift assignment
 
@@ -368,16 +367,22 @@ enum Status : primitive uint8 {
 
 #### References
 
-&emsp;References in C-Prime are declared with the `reference` keyword with the referenced type inside of angled brackets `< >` and are a way to represent an alias to an existing variable.
+&emsp;References in C-Prime are declared with the `reference` keyword with the referenced type inside of angled brackets `<T>` and are a way to represent an alias to an existing variable.
 
-&emsp;A value is converted to a reference type using the `reference(T value)` function, where `T` is the type of the value being referenced and will return a reference of type `reference<T>`.
+&emsp;A reference is constructed using the `reference(T value)` constructor, where `T` is the type of the value being referenced and will return a reference of type `reference<T>`.
 
 ```cprime
 primitive uint32 a = 10;
 reference<primitive uint32> b = reference(a); // b is a reference to a
 ```
 
-&emsp;By default, references in C-Prime immutable; meaning the cannot be assigned to refer to a new variable after initialization. References can be made mutable by using the `mutable` keyword, just like other variables.
+&emsp;A reference must always be initialized when it is declared, and it cannot be null. This ensures that a reference always refers to a valid variable. 
+
+```cprime
+reference<primitive uint32> a; // ERROR (References must be initialized)
+```
+
+&emsp;By default, references in C-Prime are immutable; meaning the cannot be assigned to refer to a new variable after initialization. References can be made mutable by using the `mutable` keyword, just like other variables.
 
 ```cprime
 primitive uint32 a = 10;
@@ -390,37 +395,23 @@ mutable reference<primitive uint32> r2 = reference(a); // `r2` is a mutable refe
 r2 = reference(b); // `r2` can be reassigned to refer to a new variable because `r2` is mutable
 ```
 
-&emsp;A reference must always be initialized when it is declared, and it cannot be null. This ensures that a reference always refers to a valid variable. 
-
-```cprime
-reference<primitive uint32> a; // ERROR (References must be initialized)
-```
-
-&emsp;C-Prime references and the variables they reference have independent mutability. You can have an immutable reference to an immutable variable, immutable references to mutable variables, mutable references to immutable variables, mutable references to mutable variables.
-
-&emsp;An immutable reference cannot be reassigned to refer to another variable after it has been initialized. Only mutable references can be reassigned to refer to different variables.
-
-```cprime
-primitive uint32 a = 10;
-primitive uint32 b = 20;
-mutable primitive uint32 c = 30;
-mutable primitive uint32 d = 40;
-
-reference<primitive uint32> ra = reference(a); // Immutable reference to an immutable variable
-reference <mutable primitive uint32> rc = reference(c); // Immutable reference to a mutable variable
-mutable reference<primitive uint32> r3 = reference(a); // `r3` is a mutable reference to an immutable variable
-mutable reference<mutable primitive uint32> r4 = reference(c); // `r4` is a mutable reference to a mutable variable
-```
-
-&emsp;A reference can be refer to a mutable variable but typed as a reference to an immutable variable, meaning the reference itself cannot be used to modify the value of the variable it refers to.
-
-&emsp;In other words, a `reference<mutable T>` can be implicitly converted to a `reference<const T>`, allowing an reference to a mutable variable to be treated as a reference to an immutable variable.
+&emsp;The type a reference declared to refer to determines whether the value of the referenced variable can be modified through that reference. With `reference<mutable T>`, the referenced variable can be modified, whereas for a `reference<T>`, the referenced variable cannot be modified through the reference. Using `reference<mutable T>` is valid only when the referenced variable itself is mutable.
 
 ```cprime
 mutable primitive uint32 a = 10;
-reference<primitive uint32> ra = reference(a); // Immutable reference to a mutable variable that cannot be used to modify the value of the variable it refers to
-reference <primitive const uint32> ra = reference(a); // Same as above, `const` is just optionally added.
+primitive uint32 b = 10;
+
+reference<mutable primitive uint32> r = reference(a);
+r = 20; // Modifies the value of the referenced variable `a`
+
+reference<mutable primitive uint32> r3 = reference(b); // ERROR (Cannot create a mutable reference to an immutable variable)
+
+reference<primitive uint32> r2 = reference(a);
+r2 = 30; // ERROR (Cannot modify the value of the referenced variable through a reference to an immutable type)
+
 ```
+
+&emsp;A reference can be declared to refer to either a immutable variable, even if the variable itself is mutable, this means that the reference cannot be used to modify the value of the variable it refers to.
 
 #### Pointers
 
@@ -437,20 +428,6 @@ unsafe {
 }
 
 pointer<primitive uint32> p3 = pointer(a); // ERROR (pointer types must be declared 'unsafe' or used inside an unsafe block)
-```
-
-&emsp;A function can be marked `unsafe`, which allows pointer types to appear in its parameter list and return type. This does **not** grant its body any special permission; using a pointer type, calling `pointer()`, or performing any other unsafe operation inside the body still requires an explicit `unsafe` keyword (either an `unsafe { }` block or an `unsafe`-prefixed declaration), exactly as in a normal function.
-
-```cprime
-unsafe function store(pointer<primitive uint32> tracked) -> primitive uint32 {
-    pointer<primitive uint32> alias = tracked; // ERROR (the function body is not automatically unsafe)
-
-    unsafe {
-        pointer<primitive uint32> alias = tracked; // OK (explicitly marked unsafe)
-    }
-
-    return 0;
-}
 ```
 
 ## Functions
@@ -726,7 +703,7 @@ function increment(primitive uint32 a) -> primitive uint32 b
 ```cprime
 if (condition) {
     // Code block executed if condition is true
-else if (another_condition) {
+} else if (another_condition) {
     // Code block executed if another_condition is true
 } else {
     // Code block executed if condition is false

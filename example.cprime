@@ -65,6 +65,14 @@ function exampleFunctionContracts(primitive uint32 a) -> primitive uint32 b :
     return value;
 }
 
+function examplePassByReference(reference<primitive uint32> value) -> void {
+    print(value);
+}
+
+function exampleReturnByReference(reference<primitive uint32> value) -> reference<primitive uint32> {
+    return value;
+}
+
 function main() {
     println("Welcome to C-Prime!");
 
@@ -80,8 +88,13 @@ function main() {
     
     boundedTemplateExample('a');
 
-    exampleDiscardedFunction();
-
     templateUnionExample('a');
 
+    exampleDiscardedFunction();
+
+    primitive uint32 e = exampleFunctionContracts(10);
+
+    reference<primitive uint32> f = reference(a);
+
+    reference<primitive uint32> g = exampleReturnByReference(f);
 }

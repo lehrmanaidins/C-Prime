@@ -33,7 +33,12 @@ static std::string emitExpression(const SemanticExpressionIR& expression, CppEmi
             }
             return expression.text;
         case SemanticExpressionKind::Call: {
-            std::string call = sanitizeIdentifier(expression.operator_symbol) + "(";
+            std::string callee = sanitizeIdentifier(expression.operator_symbol);
+            if (expression.operator_symbol == "pointer" || expression.operator_symbol == "reference") {
+                context.required_headers.insert("\"src/runtime/c-prime-types.hpp\"");
+                callee = "cprime::" + expression.operator_symbol;
+            }
+            std::string call = callee + "(";
             for (size_t i = 0; i < expression.children.size(); ++i) {
                 if (i > 0) call += ", ";
                 call += emitExpression(expression.children[i], context);

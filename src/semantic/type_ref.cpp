@@ -23,6 +23,7 @@ struct SemanticTypeRef {
     bool is_const = false;
     bool is_mutable = false;
     std::vector<SemanticTypeRef> tuple_elements;
+    std::vector<SemanticTypeRef> generic_arguments;
     std::vector<std::string> array_dimensions;
     std::shared_ptr<SemanticTypeRef> reference_target;
     std::shared_ptr<SemanticTypeRef> pointer_target;
@@ -138,6 +139,31 @@ static SemanticTypeRef parseTypeRef(const std::string& raw_type) {
         base_type.name = "function";
         base_type.array_dimensions = dimensions;
         return base_type;
+    }
+
+    // Generic type instantiation, e.g. `Box<DomainType>` or `Pair<T, U>`.
+    if (!compact.empty() && compact.back() == '>') {
+        const size_t open = type.find('<');
+        const size_t close = type.rfind('>');
+        if (open != std::string::npos && close != std::string::npos && close > open) {
+            const std::string head = trim(type.substr(0, open));
+            const bool head_is_identifier = !head.empty()
+                && (std::isalpha(static_cast<unsigned char>(head.front())) || head.front() == '_')
+                && std::all_of(head.begin(), head.end(), [](char ch) {
+                    return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_';
+                });
+            if (head_is_identifier) {
+                base_type.kind = SemanticTypeKind::Named;
+                base_type.name = head;
+                base_type.array_dimensions = dimensions;
+                for (const auto& part : splitTopLevel(trim(type.substr(open + 1, close - open - 1)), ',')) {
+                    if (!trim(part).empty()) {
+                        base_type.generic_arguments.push_back(parseTypeRef(part));
+                    }
+                }
+                return base_type;
+            }
+        }
     }
 
     if (type.size() >= 2 && type.front() == '(' && type.back() == ')') {

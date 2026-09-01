@@ -1,0 +1,5 @@
+type DomainType : primitive uint32;
+
+function main() {
+    DomainType<primitive uint32> bad = 1;
+}

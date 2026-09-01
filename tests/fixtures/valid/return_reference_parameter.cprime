@@ -1,0 +1,13 @@
+function forwardReference(reference<mutable primitive uint32> value) -> reference<mutable primitive uint32> {
+    return value;
+}
+
+function forwardBuiltinReference(reference<primitive uint32> value) -> reference<primitive uint32> {
+    return reference(value);
+}
+
+function main() {
+    mutable primitive uint32 a = 10;
+    reference<mutable primitive uint32> r = forwardReference(reference(a));
+    println(r);
+}

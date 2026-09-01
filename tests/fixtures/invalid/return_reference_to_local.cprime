@@ -1,0 +1,7 @@
+function danglingReference() -> reference<primitive uint32> {
+    primitive uint32 local = 42;
+    return reference(local);
+}
+
+function main() {
+}

@@ -6,12 +6,7 @@
 #include <string>
 
 #include "../parsed_phrase.cpp"
-
-struct ParsedTemplateParameter {
-    std::string name;
-    std::vector<std::string> allowed_types;
-    std::string category;
-};
+#include "parsed_template_parameter.cpp"
 
 struct ParsedFunction : ParsedPhrase {
     ParsedFunction(

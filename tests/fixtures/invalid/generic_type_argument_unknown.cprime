@@ -1,0 +1,8 @@
+template <type T>
+struct Box {
+    T value;
+}
+
+function main() {
+    Box<Nonexistent> boxed = { value = 1 };
+}

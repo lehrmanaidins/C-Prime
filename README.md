@@ -1,6 +1,7 @@
 
 
 <h1 align="center">C-Prime</h1>
+
 <h3 align="center">Built for Critical Systems</h3>
 
 <p align="center">
@@ -11,21 +12,27 @@
 
 ### Work in Progress
 
-&emsp;This project is currently under active development. Features and functionality may change as the language evolves.
+&emsp;The C-Prime language is very early in the development cycle, so features may be incomplete or subject to change. Please provide feedback and report any issues you encounter.
 
-&emsp;This repo was released very early in the dev cycle, so features may be incomplete or subject to change. Please provide feedback and report any issues you encounter.
+---
 
 ### About
 
 &emsp;C-Prime is a programming language designed for critical systems, emphasizing safety and reliability.
 
+---
+
 ### Philosophy
 
-&emsp;Many programming languages are unsafe by default and put the responsibility of ensuring safety on the developer. C-Prime, is designed to be the opposite: safety by default, reducing the burden on developers and minimizing the risk of critical errors.
+#### Safety and Criticality
 
-&emsp;C-Prime is also designed for intention; every feature and design choice is made to reflect the developer's intent clearly and unambiguously in the code. Many languages often include features that can be misused or lead to ambiguous interpretations, but C-Prime aims to eliminate such pitfalls.
+&emsp;C-Prime prioritizes safety and reliability, particularly in critical systems where errors can have severe consequences. The language enforces strict safety checks and provides the tools to easily follow best practices to minimize the risk of critical failures. The language also does not include features or allow code that could compromise safety or lead to undefined behavior.
 
-&emsp;C-Prime also provides features and checks designed in the language itself to catch potential errors at both compile-time and runtime.
+#### Intention and Explicitness
+
+&emsp;C-Prime is designed for intention; every feature and design choice is made to reflect the developer's intent clearly and unambiguously in the code. No viewer should be able to misinterpret the developer's intent with any part of the code. The main language feature supporting this philosophy is the strict type system, which ensures that newly declared types, derived from primitive and other existing types, are strictly their own distinct types and cannot be implicitly converted or confused with other types, even the underlying data type.
+
+---
 
 ### Transpiler
 

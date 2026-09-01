@@ -1,8 +1,10 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "../parsed_phrase.cpp"
+#include "parsed_template_parameter.cpp"
 
 struct ParsedTypeDefinition : ParsedPhrase {
     ParsedTypeDefinition(
@@ -16,6 +18,7 @@ struct ParsedTypeDefinition : ParsedPhrase {
 
     std::string name;
     std::string base_type;
+    std::vector<ParsedTemplateParameter> template_parameters;
 };
 
 struct ParsedRequiresClause : ParsedPhrase {
