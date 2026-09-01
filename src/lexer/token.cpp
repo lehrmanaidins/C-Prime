@@ -22,6 +22,8 @@ enum class TokenCatagory {
     Identifier,
     Literal,
     Operator,
+    Comment,
+    Newline,
     Unknown
 };
 
@@ -43,6 +45,8 @@ struct std::formatter<TokenCatagory> {
             case TokenCatagory::Identifier: name = "Identifier"; break;
             case TokenCatagory::Literal: name = "Literal"; break;
             case TokenCatagory::Operator: name = "Operator"; break;
+            case TokenCatagory::Comment: name = "Comment"; break;
+            case TokenCatagory::Newline: name = "Newline"; break;
             case TokenCatagory::Unknown: name = "Unknown"; break;
         }
         return std::format_to(ctx.out(), "{}", name);
@@ -225,7 +229,17 @@ struct Token {
         if (value.empty()) {
             return;
         }
-       
+
+        if (value == "\n") {
+            type = TokenCatagory::Newline;
+            return;
+        }
+
+        if (value.size() >= 2 && value[0] == '/' && (value[1] == '/' || value[1] == '*')) {
+            type = TokenCatagory::Comment;
+            return;
+        }
+
         if (isSeparator(value[0])) {
             type = TokenCatagory::Separator;
             return;

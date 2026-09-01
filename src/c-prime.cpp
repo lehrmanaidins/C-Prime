@@ -14,6 +14,18 @@
 #include "debug/print.cpp"
 #include "io/file.cpp"
 
+static void clearPhraseTrivia(const std::shared_ptr<Phrase>& phrase) {
+    if (!phrase) {
+        return;
+    }
+    phrase->leading_trivia.clear();
+    phrase->trailing_trivia.clear();
+    phrase->trailing_comment.clear();
+    for (const auto& nested : phrase->nested_phrases) {
+        clearPhraseTrivia(nested);
+    }
+}
+
 static ParsedPhrases parseCPrimeFileWithImports(
     const std::string& filename,
     bool debug,
@@ -64,6 +76,14 @@ static ParsedPhrases parseCPrimeFileWithImports(
 
         if (import_phrase->import_kind == ParsedImportKind::CPrime) {
             ParsedPhrases imported_phrases = parseCPrimeFileWithImports(resolved_path, debug, importing);
+            if (import_phrase->source_phrase
+                && !imported_phrases.empty()
+                && imported_phrases.front()
+                && imported_phrases.front()->source_phrase) {
+                auto& destination = imported_phrases.front()->source_phrase->leading_trivia;
+                const auto& carried = import_phrase->source_phrase->leading_trivia;
+                destination.insert(destination.begin(), carried.begin(), carried.end());
+            }
             expanded.insert(expanded.end(), imported_phrases.begin(), imported_phrases.end());
             continue;
         }
@@ -94,6 +114,11 @@ static int runCompiler(const CliOptions& options) {
     try {
         std::unordered_set<std::string> importing{};
         ParsedPhrases parsed_phrases = parseCPrimeFileWithImports(prelude_filename, options.debug, importing);
+        for (const auto& prelude_phrase : parsed_phrases) {
+            if (prelude_phrase) {
+                clearPhraseTrivia(prelude_phrase->source_phrase);
+            }
+        }
         ParsedPhrases source_phrases = parseCPrimeFileWithImports(filename, options.debug, importing);
         parsed_phrases.insert(parsed_phrases.end(), source_phrases.begin(), source_phrases.end());
         if (options.debug) {

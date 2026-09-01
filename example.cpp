@@ -2,12 +2,19 @@
 #include <concepts>
 #include <array>
 #include <tuple>
-#include "src/runtime/c-prime.hpp"
 #include <utility>
 #include "src/runtime/c-prime-types.hpp"
 #include <stdexcept>
+#include "src/runtime/c-prime.hpp"
 
+
+// C-Prime implemented feature showcase.
+
+[[nodiscard]] auto imported_add(cprime::uint32 left, cprime::uint32 right) -> cprime::uint32 {
+    return (left + right);
+}
 #include "example_native.cpp"
+
 struct DomainType {
     cprime::uint32 value;
 
@@ -44,48 +51,56 @@ struct FixedDomainList {
 
     [[nodiscard]] operator std::array<DomainType, 3>() const { return value; }
 };
+
 struct StructType {
     DomainType domain_value;
     bool primitive_value;
 };
+
 enum class EnumType {
     ENUM_VALUE_ONE,
     ENUM_VALUE_TWO,
     ENUM_VALUE_THREE
 };
-[[nodiscard]] auto imported_add(cprime::uint32 left, cprime::uint32 right) -> cprime::uint32 {
-    return (left + right);
-}
+
 auto exampleFunction() -> void {
     print("This is an example function.");
 }
+
 [[nodiscard]] auto examplePrimitiveReturn() -> cprime::uint32 {
     return 42;
 }
+
 [[nodiscard]] auto exampleDomainReturn() -> DomainType {
     return 0;
 }
+
 template <typename T>
 [[nodiscard]] auto templateParameterAndReturnExample(T first) -> T {
     return first;
 }
+
 template <typename T, typename U>
 [[nodiscard]] auto templateMultipleTypesExample(T first, U second) -> T {
     return first;
 }
+
 template <typename T>
 requires (std::same_as<T, cprime::char8> || std::same_as<T, cprime::char16> || std::same_as<T, cprime::char32>)
 auto boundedTemplateExample(T v) -> void {
     print(v);
 }
+
 template <typename T>
 requires (std::same_as<T, cprime::char8> || std::same_as<T, cprime::char16> || std::same_as<T, cprime::char32>)
 auto templateUnionExample(T v) -> void {
     print(v);
 }
+
 auto exampleDiscardedFunction() -> cprime::uint32 {
     return 42;
 }
+
 [[nodiscard]] auto exampleFunctionContracts(cprime::uint32 a) -> cprime::uint32 {
     if (!((a > 0))) { throw std::runtime_error("function requires clause violated"); }
     const cprime::uint32 value = (a * 2);
@@ -93,24 +108,38 @@ auto exampleDiscardedFunction() -> cprime::uint32 {
     if (!((b < 100))) { throw std::runtime_error("function ensures clause violated"); }
     return b;
 }
+
 auto examplePassByReference(cprime::reference<const cprime::uint32> value) -> void {
     print(value);
 }
+
 [[nodiscard]] auto exampleReturnByReference(cprime::reference<const cprime::uint32> value) -> cprime::reference<const cprime::uint32> {
     return value;
 }
+
 [[nodiscard]] auto main() -> int {
     println("Welcome to C-Prime!");
+
     exampleFunction();
+
     const cprime::uint32 a = examplePrimitiveReturn();
+
     const DomainType b = exampleDomainReturn();
+
     const cprime::uint32 c = templateParameterAndReturnExample(123);
+
     const cprime::uint32 d = templateMultipleTypesExample(123, "abc");
+
     boundedTemplateExample(static_cast<cprime::char8>(97));
+
     templateUnionExample(static_cast<cprime::char8>(97));
+
     exampleDiscardedFunction();
+
     const cprime::uint32 e = exampleFunctionContracts(10);
+
     const cprime::reference<const cprime::uint32> f = cprime::reference(a);
+
     const cprime::reference<const cprime::uint32> g = exampleReturnByReference(f);
     return 0;
 }

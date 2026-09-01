@@ -16,6 +16,7 @@ struct CppEmitStatementData {
     const std::vector<SemanticWhileIR>& whiles;
     const std::vector<SemanticForIR>& fors;
     const std::vector<SemanticElseIR>& elses;
+    const std::vector<SemanticTriviaIR>& trivia;
 };
 
 static void emitStatementList(

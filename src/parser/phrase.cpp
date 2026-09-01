@@ -7,6 +7,16 @@
 
 #include "../lexer/token.cpp"
 
+enum class PhraseTriviaKind {
+    Comment,
+    BlankLine
+};
+
+struct PhraseTrivia {
+    PhraseTriviaKind kind;
+    std::string text;
+};
+
 struct Phrase {
     Phrase(const std::vector<std::shared_ptr<Token>>& tokens,
            const std::shared_ptr<Phrase>& parent_phrase = nullptr
@@ -27,6 +37,9 @@ struct Phrase {
     std::vector<std::shared_ptr<Token>> tokens;
     std::shared_ptr<Phrase> parent_phrase;
     std::vector<std::shared_ptr<Phrase>> nested_phrases;
+    std::vector<PhraseTrivia> leading_trivia;
+    std::vector<PhraseTrivia> trailing_trivia;
+    std::string trailing_comment;
     size_t start_line;
     size_t start_column;
     size_t end_line;

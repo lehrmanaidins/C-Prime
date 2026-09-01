@@ -32,6 +32,7 @@ struct CppEmitContext {
     bool current_function_has_ensures = false;
     SemanticExpressionIR current_function_ensures_clause;
     size_t current_cpp_line = 1;
+    std::string pending_line_suffix;
 
     void pushLine(const SourceLocation& loc, const std::string& note) {
         source_map.push_back({current_cpp_line, loc.line, loc.column, note});
@@ -92,6 +93,11 @@ static std::string nodiscardPrefix(const std::string& return_type, bool is_disca
 
 static void appendLine(std::string& output, CppEmitContext& context, const std::string& line) {
     output += line;
+    if (!context.pending_line_suffix.empty() && !line.empty()) {
+        output += " ";
+        output += context.pending_line_suffix;
+        context.pending_line_suffix.clear();
+    }
     output += "\n";
     ++context.current_cpp_line;
 }

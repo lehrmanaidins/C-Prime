@@ -69,6 +69,13 @@ Phrases preparseTokens(const Tokens& tokens) {
     int expression_brace_depth = 0;
     int paren_depth = 0;
 
+    // Comment and newline tokens are stripped from phrases here and preserved
+    // as trivia so the transpiler can reproduce blank lines and comments.
+    std::vector<PhraseTrivia> pending_trivia{};
+    std::string pending_trailing_comment{};
+    std::shared_ptr<Phrase> last_flushed_phrase{};
+    bool line_has_content = false;
+
     auto flushCurrent = [&]() {
         if (current_tokens.empty()) {
             return;
@@ -76,6 +83,10 @@ Phrases preparseTokens(const Tokens& tokens) {
 
         std::shared_ptr<Phrase> parent = scope_stack.empty() ? nullptr : scope_stack.back();
         auto phrase = std::make_shared<Phrase>(current_tokens, parent);
+        phrase->leading_trivia = std::move(pending_trivia);
+        pending_trivia.clear();
+        phrase->trailing_comment = pending_trailing_comment;
+        pending_trailing_comment.clear();
 
         if (parent != nullptr) {
             parent->addNested(phrase);
@@ -83,6 +94,7 @@ Phrases preparseTokens(const Tokens& tokens) {
             phrases.push_back(phrase);
         }
 
+        last_flushed_phrase = phrase;
         current_tokens.clear();
     };
 
@@ -90,6 +102,33 @@ Phrases preparseTokens(const Tokens& tokens) {
         if (!token) {
             continue;
         }
+
+        if (token->type == TokenCatagory::Newline) {
+            if (!line_has_content) {
+                pending_trivia.push_back({PhraseTriviaKind::BlankLine, ""});
+            }
+            line_has_content = false;
+            continue;
+        }
+
+        if (token->type == TokenCatagory::Comment) {
+            line_has_content = true;
+            if (current_tokens.empty()
+                && last_flushed_phrase != nullptr
+                && last_flushed_phrase->end_line == token->line
+                && last_flushed_phrase->trailing_comment.empty()) {
+                last_flushed_phrase->trailing_comment = token->value;
+            } else if (!current_tokens.empty()
+                && current_tokens.back()
+                && current_tokens.back()->line == token->line) {
+                pending_trailing_comment = token->value;
+            } else {
+                pending_trivia.push_back({PhraseTriviaKind::Comment, token->value});
+            }
+            continue;
+        }
+
+        line_has_content = true;
 
         const std::string value = token->value;
 
@@ -136,6 +175,10 @@ Phrases preparseTokens(const Tokens& tokens) {
 
             flushCurrent();
             if (!scope_stack.empty()) {
+                if (!pending_trivia.empty()) {
+                    scope_stack.back()->trailing_trivia = std::move(pending_trivia);
+                    pending_trivia.clear();
+                }
                 scope_stack.pop_back();
             }
             continue;
@@ -160,6 +203,13 @@ Phrases preparseTokens(const Tokens& tokens) {
     }
 
     flushCurrent();
+
+    if (!pending_trivia.empty() && last_flushed_phrase != nullptr) {
+        for (auto& trivia : pending_trivia) {
+            last_flushed_phrase->trailing_trivia.push_back(std::move(trivia));
+        }
+        pending_trivia.clear();
+    }
 
     return phrases;
 }

@@ -42,7 +42,8 @@ static void emitMemberFunction(
         function.if_statements,
         function.while_statements,
         function.for_statements,
-        function.else_statements
+        function.else_statements,
+        function.trivia
     };
 
     emitStatementList(output, context, function.body_order, function_data, indent_str.size() / 4 + 1);

@@ -127,8 +127,29 @@ enum class SemanticStatementKind {
     Call,
     Return,
     Break,
-    Continue
+    Continue,
+    Trivia,
+    Function
 };
+
+struct SemanticTriviaIR {
+    std::vector<std::string> lines;
+    std::string suffix;
+};
+
+static std::vector<std::string> triviaToLines(const std::vector<PhraseTrivia>& trivia) {
+    std::vector<std::string> lines;
+    for (const auto& item : trivia) {
+        lines.push_back(item.kind == PhraseTriviaKind::Comment ? item.text : std::string{});
+    }
+    return lines;
+}
+
+static SemanticTriviaIR makeLeadingTrivia(const std::vector<PhraseTrivia>& trivia) {
+    SemanticTriviaIR node{};
+    node.lines = triviaToLines(trivia);
+    return node;
+}
 
 struct SemanticStatementRef {
     SemanticStatementKind kind;
@@ -192,6 +213,9 @@ struct SemanticFunctionIR {
     std::vector<SemanticWhileIR> while_statements;
     std::vector<SemanticForIR> for_statements;
     std::vector<SemanticElseIR> else_statements;
+    std::vector<SemanticTriviaIR> trivia;
+    std::vector<std::string> leading_trivia_lines;
+    std::vector<std::string> trailing_trivia_lines;
     std::vector<SemanticStatementRef> body_order;
 
     SourceLocation location;
@@ -210,6 +234,8 @@ struct SemanticProgram {
     std::vector<SemanticWhileIR> while_statements;
     std::vector<SemanticForIR> for_statements;
     std::vector<SemanticElseIR> else_statements;
+    std::vector<SemanticTriviaIR> trivia;
+    std::vector<std::string> trailing_trivia_lines;
     std::vector<SemanticStatementRef> top_level_order;
     std::unordered_map<std::string, std::vector<std::string>> union_members;
 };
@@ -1766,7 +1792,8 @@ static void lowerBodyPhrases(
     std::vector<SemanticForIR>& for_statements,
     std::vector<SemanticElseIR>& else_statements,
     std::vector<SemanticStatementRef>& order,
-    const SemanticSymbolTable& symbols
+    const SemanticSymbolTable& symbols,
+    std::vector<SemanticTriviaIR>* trivia_sink = nullptr
 );
 
 static void lowerBodyPhrases(
@@ -1784,12 +1811,19 @@ static void lowerBodyPhrases(
     std::vector<SemanticForIR>& for_statements,
     std::vector<SemanticElseIR>& else_statements,
     std::vector<SemanticStatementRef>& order,
-    const SemanticSymbolTable& symbols
+    const SemanticSymbolTable& symbols,
+    std::vector<SemanticTriviaIR>* trivia_sink
 ) {
     for (const auto& phrase : phrases) {
         if (!phrase) {
             continue;
         }
+
+        // Some nested phrases (parameter declarations, contract clauses) share
+        // their `source_phrase` with the owning function and never produce a
+        // statement; trivia is only attached to phrases that actually emit one.
+        const std::shared_ptr<Phrase> source_phrase = phrase->source_phrase;
+        const size_t order_size_before_statement = order.size();
 
         switch (phrase->kind) {
             case ParsedPhraseKind::VariableDeclaration: {
@@ -1885,7 +1919,8 @@ static void lowerBodyPhrases(
                         for_statements,
                         else_statements,
                         node.body,
-                        symbols
+                        symbols,
+                        trivia_sink
                     );
                     if_statements.push_back(node);
                     order.push_back({SemanticStatementKind::If, if_statements.size() - 1});
@@ -1911,7 +1946,8 @@ static void lowerBodyPhrases(
                         for_statements,
                         else_statements,
                         node.body,
-                        symbols
+                        symbols,
+                        trivia_sink
                     );
                     while_statements.push_back(node);
                     order.push_back({SemanticStatementKind::While, while_statements.size() - 1});
@@ -1939,7 +1975,8 @@ static void lowerBodyPhrases(
                         for_statements,
                         else_statements,
                         node.body,
-                        symbols
+                        symbols,
+                        trivia_sink
                     );
                     for_statements.push_back(node);
                     order.push_back({SemanticStatementKind::For, for_statements.size() - 1});
@@ -1965,7 +2002,8 @@ static void lowerBodyPhrases(
                         for_statements,
                         else_statements,
                         node.body,
-                        symbols
+                        symbols,
+                        trivia_sink
                     );
                     else_statements.push_back(node);
                     order.push_back({SemanticStatementKind::Else, else_statements.size() - 1});
@@ -1987,12 +2025,32 @@ static void lowerBodyPhrases(
                     for_statements,
                     else_statements,
                     order,
-                    symbols
+                    symbols,
+                    trivia_sink
                 );
                 break;
             }
             default:
                 break;
+        }
+
+        if (trivia_sink == nullptr || !source_phrase || order.size() == order_size_before_statement) {
+            continue;
+        }
+
+        if (!source_phrase->leading_trivia.empty()) {
+            trivia_sink->push_back(makeLeadingTrivia(source_phrase->leading_trivia));
+            order.insert(
+                order.begin() + static_cast<std::ptrdiff_t>(order_size_before_statement),
+                SemanticStatementRef{SemanticStatementKind::Trivia, trivia_sink->size() - 1}
+            );
+        }
+
+        if (!source_phrase->trailing_comment.empty()) {
+            SemanticTriviaIR suffix_trivia{};
+            suffix_trivia.suffix = source_phrase->trailing_comment;
+            trivia_sink->push_back(suffix_trivia);
+            order.push_back({SemanticStatementKind::Trivia, trivia_sink->size() - 1});
         }
     }
 }
@@ -2045,6 +2103,10 @@ static SemanticFunctionIR lowerFunction(
         function_ir.template_parameters.push_back(template_parameter);
     }
     function_ir.location = phraseStartLocation(phrase);
+    if (phrase->source_phrase) {
+        function_ir.leading_trivia_lines = triviaToLines(phrase->source_phrase->leading_trivia);
+        function_ir.trailing_trivia_lines = triviaToLines(phrase->source_phrase->trailing_trivia);
+    }
 
     for (const auto& nested : phrase->nested_phrases) {
         if (!nested) {
@@ -2080,7 +2142,8 @@ static SemanticFunctionIR lowerFunction(
         function_ir.for_statements,
         function_ir.else_statements,
         function_ir.body_order,
-        symbols
+        symbols,
+        &function_ir.trivia
     );
 
     return function_ir;
@@ -2095,9 +2158,12 @@ static void lowerTopLevelPhrase(
         return;
     }
 
+    const size_t top_level_order_size_before = program.top_level_order.size();
+
     switch (phrase->kind) {
         case ParsedPhraseKind::Function:
             program.functions.push_back(lowerFunction(std::dynamic_pointer_cast<ParsedFunction>(phrase), symbols));
+            program.top_level_order.push_back({SemanticStatementKind::Function, program.functions.size() - 1});
             break;
         case ParsedPhraseKind::VariableDeclaration: {
             program.global_variables.push_back(lowerVariableDeclaration(std::dynamic_pointer_cast<ParsedVariableDeclaration>(phrase)));
@@ -2134,6 +2200,28 @@ static void lowerTopLevelPhrase(
         }
         default:
             break;
+    }
+
+    // Functions carry their own trivia through SemanticFunctionIR.
+    if (phrase->kind == ParsedPhraseKind::Function
+        || !phrase->source_phrase
+        || program.top_level_order.size() == top_level_order_size_before) {
+        return;
+    }
+
+    if (!phrase->source_phrase->leading_trivia.empty()) {
+        program.trivia.push_back(makeLeadingTrivia(phrase->source_phrase->leading_trivia));
+        program.top_level_order.insert(
+            program.top_level_order.begin() + static_cast<std::ptrdiff_t>(top_level_order_size_before),
+            SemanticStatementRef{SemanticStatementKind::Trivia, program.trivia.size() - 1}
+        );
+    }
+
+    if (!phrase->source_phrase->trailing_comment.empty()) {
+        SemanticTriviaIR suffix_trivia{};
+        suffix_trivia.suffix = phrase->source_phrase->trailing_comment;
+        program.trivia.push_back(suffix_trivia);
+        program.top_level_order.push_back({SemanticStatementKind::Trivia, program.trivia.size() - 1});
     }
 }
 

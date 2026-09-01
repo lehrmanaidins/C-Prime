@@ -48,58 +48,64 @@ struct SourceCursor {
     }
 };
 
-static void skipDelimiters(SourceCursor& cursor) {
-    while (!cursor.eof() && Token::isDelimiter(cursor.peek())) {
-        cursor.get();
-    }
+static bool commentStartsAt(const SourceCursor& cursor) {
+    return cursor.peek() == '/' && (cursor.peek(1) == '/' || cursor.peek(1) == '*');
 }
 
-static void skipCommentIfPresent(SourceCursor& cursor, bool& skipped_comment) {
-    skipped_comment = false;
+static std::string captureComment(SourceCursor& cursor) {
+    std::string text;
+    text += cursor.get();
+    const char kind = cursor.get();
+    text += kind;
 
-    if (cursor.peek() != '/') {
-        return;
-    }
-
-    if (cursor.peek(1) == '/') {
-        cursor.get();
-        cursor.get();
-
+    if (kind == '/') {
         while (!cursor.eof() && cursor.peek() != '\n') {
-            cursor.get();
+            text += cursor.get();
         }
-
-        skipped_comment = true;
-        return;
+        while (!text.empty() && (text.back() == '\r' || text.back() == ' ' || text.back() == '\t')) {
+            text.pop_back();
+        }
+        return text;
     }
 
-    if (cursor.peek(1) == '*') {
-        cursor.get();
-        cursor.get();
-
-        while (!cursor.eof()) {
-            const char ch = cursor.get();
-            if (ch == '*' && cursor.peek() == '/') {
-                cursor.get();
-                break;
-            }
+    while (!cursor.eof()) {
+        const char ch = cursor.get();
+        text += ch;
+        if (ch == '*' && cursor.peek() == '/') {
+            text += cursor.get();
+            break;
         }
-
-        skipped_comment = true;
     }
+    return text;
 }
 
 Token getToken(SourceCursor& cursor) {
     std::string token;
 
-    while (true) {
-        skipDelimiters(cursor);
-
-        bool skipped_comment = false;
-        skipCommentIfPresent(cursor, skipped_comment);
-        if (!skipped_comment) {
-            break;
+    // Insignificant whitespace is skipped, but newlines and comments are
+    // surfaced as their own tokens so the transpiler can reproduce blank
+    // lines and comments. These trivia tokens are stripped before parsing.
+    while (!cursor.eof()) {
+        const char ch = cursor.peek();
+        if (ch == '\n') {
+            const size_t newline_line = cursor.line;
+            const size_t newline_column = cursor.column;
+            cursor.get();
+            return Token("\n", newline_line, newline_column);
         }
+
+        if (commentStartsAt(cursor)) {
+            const size_t comment_line = cursor.line;
+            const size_t comment_column = cursor.column;
+            return Token(captureComment(cursor), comment_line, comment_column);
+        }
+
+        if (Token::isDelimiter(ch)) {
+            cursor.get();
+            continue;
+        }
+
+        break;
     }
 
     if (cursor.eof()) {
