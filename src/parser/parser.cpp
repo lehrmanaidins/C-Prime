@@ -924,7 +924,12 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
         parsed_phrase = struct_definition;
     } else if (isEnumDefinitionPhrase(phrase)) {
         const std::string enum_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
-        parsed_phrase = std::make_shared<ParsedEnumDefinition>(enum_name, phrase);
+        auto enum_definition = std::make_shared<ParsedEnumDefinition>(enum_name, phrase);
+        const size_t colon_index = findTokenIndex(phrase->tokens, ":");
+        if (colon_index != phrase->tokens.size()) {
+            enum_definition->base_type = joinTokenRange(phrase->tokens, colon_index + 1, phrase->tokens.size());
+        }
+        parsed_phrase = enum_definition;
     } else if (isUnionDefinitionPhrase(phrase)) {
         const std::string union_name = phrase->tokens[1] ? phrase->tokens[1]->value : "";
         const size_t colon_index = findTokenIndex(phrase->tokens, ":");

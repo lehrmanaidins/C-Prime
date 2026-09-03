@@ -85,6 +85,7 @@ struct SemanticStructDefinitionIR {
 struct SemanticEnumDefinitionIR {
     std::string name;
     std::vector<std::string> values;
+    std::string underlying_cpp_type;
     SourceLocation location;
 };
 
@@ -1743,6 +1744,26 @@ static SemanticStructDefinitionIR lowerStructDefinition(const std::shared_ptr<Pa
     return node;
 }
 
+// Resolves the C++ integral type that backs an enum. An explicit `: primitive
+// <int>` underlying wins; otherwise the smallest unsigned type that can hold the
+// number of enumerators is chosen.
+static std::string enumUnderlyingCppType(const std::string& raw_base_type, size_t value_count) {
+    const std::string name = normalizeTypeName(raw_base_type);
+    if (name == "uint8") return "std::uint8_t";
+    if (name == "uint16") return "std::uint16_t";
+    if (name == "uint32") return "std::uint32_t";
+    if (name == "uint64") return "std::uint64_t";
+    if (name == "int8") return "std::int8_t";
+    if (name == "int16") return "std::int16_t";
+    if (name == "int32") return "std::int32_t";
+    if (name == "int64") return "std::int64_t";
+
+    if (value_count <= 0xFFull) return "std::uint8_t";
+    if (value_count <= 0xFFFFull) return "std::uint16_t";
+    if (value_count <= 0xFFFFFFFFull) return "std::uint32_t";
+    return "std::uint64_t";
+}
+
 static SemanticEnumDefinitionIR lowerEnumDefinition(const std::shared_ptr<ParsedEnumDefinition>& phrase) {
     SemanticEnumDefinitionIR node{};
     node.name = phrase->name;
@@ -1766,6 +1787,7 @@ static SemanticEnumDefinitionIR lowerEnumDefinition(const std::shared_ptr<Parsed
         }
     }
 
+    node.underlying_cpp_type = enumUnderlyingCppType(phrase->base_type, node.values.size());
     return node;
 }
 

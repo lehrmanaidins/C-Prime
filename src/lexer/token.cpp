@@ -2,14 +2,18 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include <fstream>
+#include <sstream>
 #include <algorithm>
 #include <cctype>
 #include <iostream>
 #if __has_include(<format>)
 #include <format>
 #endif
+
+#include "../embedded/resources.hpp"
 
 using Terms = std::vector<std::string>;
 
@@ -88,9 +92,9 @@ std::string decodeEscapedToken(const std::string& value) {
     return decoded;
 }
 
-Terms loadTerms(const std::string& filename, bool emptyLineAsSpace = false) {
-    std::ifstream termsFile(filename);
+Terms loadTermsFromText(std::string_view text, bool emptyLineAsSpace = false) {
     std::vector<std::string> terms{};
+    std::istringstream termsFile{std::string(text)};
     std::string line = "";
 
     while (std::getline(termsFile, line)) {
@@ -147,22 +151,22 @@ struct Token {
     operator bool() const { return !value.empty(); }
 
     static bool isSeparator(char c) {
-        static const Terms separators = loadTerms("src/lists/separators.txt");
+        static const Terms separators = loadTermsFromText(embedded::separators_txt());
         return std::find(separators.begin(), separators.end(), std::string(1, c)) != separators.end();
     }
 
     static bool isDelimiter(char c) {
-        static const Terms delimiters = loadTerms("src/lists/delimiters.txt", true);
+        static const Terms delimiters = loadTermsFromText(embedded::delimiters_txt(), true);
         return std::find(delimiters.begin(), delimiters.end(), std::string(1, c)) != delimiters.end();
     }
 
     static bool isKeyword(const std::string& str) {
-        static const Terms keywords = loadTerms("src/lists/keywords.txt");
+        static const Terms keywords = loadTermsFromText(embedded::keywords_txt());
         return std::find(keywords.begin(), keywords.end(), str) != keywords.end();
     }
 
     static bool isPrimitive(const std::string& str) {
-        static const Terms primitives = loadTerms("src/lists/primitives.txt");
+        static const Terms primitives = loadTermsFromText(embedded::primitives_txt());
         return std::find(primitives.begin(), primitives.end(), str) != primitives.end();
     }
 
@@ -195,12 +199,12 @@ struct Token {
     }
 
     static bool isOperator(const std::string& str) {
-        static const Terms operators = loadTerms("src/lists/operators.txt");
+        static const Terms operators = loadTermsFromText(embedded::operators_txt());
         return std::find(operators.begin(), operators.end(), str) != operators.end();
     }
 
     static bool isOperatorStart(char c) {
-        static const Terms operators = loadTerms("src/lists/operators.txt");
+        static const Terms operators = loadTermsFromText(embedded::operators_txt());
         for (const auto& op : operators) {
             if (!op.empty() && op.front() == c) {
                 return true;

@@ -1,14 +1,8 @@
 
-#pragma once
+#ifndef CPRIME_RUNTIME_TYPES_HPP
+#define CPRIME_RUNTIME_TYPES_HPP
 
-// C-Prime library types.
-//
-// This header is included implicitly in every transpiled C-Prime program. It
-// holds the definitions of the types the language provides on top of the
-// primitives (reference, pointer, optional, ...). It deliberately does NOT
-// contain the `cprime::` aliases for the primitive types; those live in
-// "c-prime.hpp", the interop header that native C++ files include when they
-// want to be importable from C-Prime.
+// C-Prime Standard Library.
 
 #include <optional>
 #include <type_traits>
@@ -65,3 +59,16 @@ namespace cprime {
     template <typename T>
     pointer(T&) -> pointer<T>;
 }
+
+template <typename... Args>
+void print(const Args&... args) {
+    (std::cout << ... << args);
+}
+
+template <typename... Args>
+void println(const Args&... args) {
+    print(args...);
+    std::cout << '\n';
+}
+
+#endif  // CPRIME_RUNTIME_TYPES_HPP

@@ -10,10 +10,6 @@
 + // Unary plus
 - // Unary minus
 
-// Bicremental Operators
-++ // Increment
--- // Decrement
-
 // Relational operators
 == // Equal to
 != // Not equal to

@@ -11,7 +11,7 @@ static std::string sanitizeDottedIdentifier(const std::string& name) {
         if (!result.empty()) {
             result += ".";
         }
-        result += sanitizeIdentifier(segment);
+        result += segment;
         if (dot == std::string::npos) {
             break;
         }

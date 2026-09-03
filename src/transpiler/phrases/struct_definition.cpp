@@ -26,9 +26,10 @@ static void emitStructDefinitionStatement(
     if (!template_line.empty()) {
         appendLine(output, context, indent_str + template_line);
     }
-    appendLine(output, context, indent_str + "struct " + sanitizeIdentifier(st.name) + " {");
+    appendLine(output, context, indent_str + "struct " + st.name + " {");
     for (const auto& field : st.fields) {
-        appendLine(output, context, indent_str + "    " + emitTypeRef(field.type, context) + " " + sanitizeIdentifier(field.name) + ";");
+        context.struct_fields[st.name].push_back(field.name);
+        appendLine(output, context, indent_str + "    " + emitTypeRef(field.type, context) + " " + field.name + ";");
     }
     appendLine(output, context, indent_str + "};");
 }

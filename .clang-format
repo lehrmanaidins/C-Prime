@@ -1,0 +1,13 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 0
+# Keep the blank lines the transpiler carries over from the C-Prime source.
+MaxEmptyLinesToKeep: 20
+KeepEmptyLinesAtTheStartOfBlocks: true
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+SortIncludes: Never

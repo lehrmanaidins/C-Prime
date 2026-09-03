@@ -1,4 +1,6 @@
 
+import "std.hpp";
+
 union UnsignedInteger : primitive uint8 | primitive uint16 | primitive uint32 | primitive uint64;
 union SignedInteger : primitive int8 | primitive int16 | primitive int32 | primitive int64;
 
@@ -13,3 +15,5 @@ union Boolean : primitive bool;
 union Primitive : Number | Character | Boolean;
 
 type String : Character[];
+
+type Size : primitive uint64;

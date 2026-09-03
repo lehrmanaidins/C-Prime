@@ -13,4 +13,5 @@ struct ParsedEnumDefinition : ParsedPhrase {
     }
 
     std::string name;
+    std::string base_type;
 };

@@ -9,5 +9,5 @@ static void emitAssignmentStatement(
     const std::string& indent_str
 ) {
     context.pushLine(asg.location, "assignment");
-    appendLine(output, context, indent_str + sanitizeIdentifier(asg.target) + " " + asg.operator_symbol + " " + emitExpression(asg.expression, context) + ";");
+    appendLine(output, context, indent_str + asg.target + " " + asg.operator_symbol + " " + emitExpression(asg.expression, context) + ";");
 }

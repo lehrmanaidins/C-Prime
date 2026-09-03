@@ -5,9 +5,9 @@ import "example_import.cprime";
 import "example_native.cpp";
 
 type DomainType : primitive uint32;
-type DomainTuple : (DomainType, DomainType);
 type DomainList : DomainType[];
 type FixedDomainList : DomainType[3];
+type DomainTypeOfDomainType : DomainType;
 
 struct StructType {
     DomainType domain_value;
@@ -21,7 +21,7 @@ enum EnumType {
 }
 
 function exampleFunction() {
-    print("This is an example function.");
+    println("This is an example function.");
 }
 
 function examplePrimitiveReturn() -> primitive uint32 {
@@ -38,18 +38,19 @@ function templateParameterAndReturnExample(T first) -> T {
 }
 
 template <type T, type U>
-function templateMultipleTypesExample(T first, U second) -> T {
-    return first;
+function templateMultipleTypesExample(T first, U second) {
+    println(first);
+    println(second);
 }
 
 template <type T : primitive char8 | primitive char16 | primitive char32>
 function boundedTemplateExample(T v) -> void {
-    print(v);
+    println(v);
 }
 
 template <type T: Character>
 function templateUnionExample(T v) -> void {
-    print(v);
+    println(v);
 }
 
 @discard
@@ -58,7 +59,8 @@ function exampleDiscardedFunction() -> primitive uint32 {
 }
 
 function exampleFunctionContracts(primitive uint32 a) -> primitive uint32 b :
-    requires (a > 0);
+    requires (sizeof(a) == 4);
+    ensures (a > 0);
     ensures (b < 100);
 {
     primitive uint32 value = a * 2;
@@ -66,7 +68,7 @@ function exampleFunctionContracts(primitive uint32 a) -> primitive uint32 b :
 }
 
 function examplePassByReference(reference<primitive uint32> value) -> void {
-    print(value);
+    println(value);
 }
 
 function exampleReturnByReference(reference<primitive uint32> value) -> reference<primitive uint32> {
@@ -79,12 +81,15 @@ function main() {
     exampleFunction();
 
     primitive uint32 a = examplePrimitiveReturn();
+    println(a);
     
     DomainType b = exampleDomainReturn();
+    println(b);
 
     primitive uint32 c = templateParameterAndReturnExample(123);
+    println(c);
     
-    primitive uint32 d = templateMultipleTypesExample(123, "abc");
+    templateMultipleTypesExample(123, "abc");
     
     boundedTemplateExample('a');
 
@@ -93,8 +98,11 @@ function main() {
     exampleDiscardedFunction();
 
     primitive uint32 e = exampleFunctionContracts(10);
+    println(e);
 
     reference<primitive uint32> f = reference(a);
+    println(f);
 
     reference<primitive uint32> g = exampleReturnByReference(f);
+    println(g);
 }

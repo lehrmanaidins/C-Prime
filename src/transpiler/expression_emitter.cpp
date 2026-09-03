@@ -4,28 +4,12 @@
 
 #include "type_emitter.cpp"
 
-static bool isCharLiteralExpression(const std::string& text) {
-    return text.size() >= 3 && text.front() == '\'' && text.back() == '\'';
-}
-
-static std::string emitCharLiteralExpression(const std::string& text, CppEmitContext& context) {
-    const auto code_point = decodedCharLiteralCodePoint(text);
-    if (!code_point.has_value()) {
-        return text;
-    }
-
-    context.required_headers.insert("\"src/runtime/c-prime.hpp\"");
-    return "static_cast<cprime::" + smallestCharTypeForCodePoint(code_point.value()) + ">(" + std::to_string(code_point.value()) + ")";
-}
-
 static std::string emitExpression(const SemanticExpressionIR& expression, CppEmitContext& context) {
     switch (expression.kind) {
         case SemanticExpressionKind::Identifier:
-            return sanitizeIdentifier(expression.text);
+            return expression.text;
         case SemanticExpressionKind::Literal:
-            if (isCharLiteralExpression(expression.text)) {
-                return emitCharLiteralExpression(expression.text, context);
-            }
+            // Character (and every other) literal is emitted verbatim.
             return expression.text;
         case SemanticExpressionKind::Binary:
             if (expression.children.size() == 2) {
@@ -33,9 +17,9 @@ static std::string emitExpression(const SemanticExpressionIR& expression, CppEmi
             }
             return expression.text;
         case SemanticExpressionKind::Call: {
-            std::string callee = sanitizeIdentifier(expression.operator_symbol);
+            std::string callee = expression.operator_symbol;
             if (expression.operator_symbol == "pointer" || expression.operator_symbol == "reference") {
-                context.required_headers.insert("\"src/runtime/c-prime-types.hpp\"");
+                context.required_headers.insert("\"std.hpp\"");
                 callee = "cprime::" + expression.operator_symbol;
             }
             std::string call = callee + "(";
@@ -100,7 +84,7 @@ static std::string emitStructInitializerExpression(const SemanticExpressionIR& e
         const std::string entry = trim(expression.children[i].text);
         const size_t eq_pos = entry.find('=');
         if (eq_pos != std::string::npos) {
-            const std::string lhs = sanitizeIdentifier(trim(entry.substr(0, eq_pos)));
+            const std::string lhs = trim(entry.substr(0, eq_pos));
             const std::string rhs = trim(entry.substr(eq_pos + 1));
             list += "." + lhs + " = " + rhs;
         } else {
@@ -187,5 +171,5 @@ static std::string emitForClauseExpression(const SemanticExpressionIR& expressio
 
     const SemanticExpressionIR initializer = parseExpressionIR(rhs, expression.location);
     const std::string qualifier = is_mutable ? "" : "const ";
-    return qualifier + emitTypeRef(parseTypeRef(type_name), context) + " " + sanitizeIdentifier(name) + " = " + emitExpression(initializer, context);
+    return qualifier + emitTypeRef(parseTypeRef(type_name), context) + " " + name + " = " + emitExpression(initializer, context);
 }

@@ -192,13 +192,8 @@ Token getToken(SourceCursor& cursor) {
     return Token(token, token_line, token_column);
 }
 
-Tokens getTokens(const std::string& filename) {
+Tokens lexSource(const std::string& source) {
     Tokens tokens{};
-
-    std::ifstream file(filename);
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    const std::string source = buffer.str();
 
     SourceCursor cursor(source);
 
@@ -212,6 +207,13 @@ Tokens getTokens(const std::string& filename) {
     }
 
     return tokens;
+}
+
+Tokens getTokens(const std::string& filename) {
+    std::ifstream file(filename);
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return lexSource(buffer.str());
 }
 
 Tokens lexFile(const std::string& filename) {

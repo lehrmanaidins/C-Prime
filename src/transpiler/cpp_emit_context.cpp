@@ -26,7 +26,10 @@ struct CppEmitContext {
     std::unordered_map<std::string, SemanticTypeRef> type_aliases;
     std::unordered_map<std::string, std::vector<std::string>> union_members;
     std::unordered_set<std::string> struct_types;
+    std::unordered_map<std::string, std::vector<std::string>> struct_fields;
     std::unordered_set<std::string> domain_struct_types;
+    std::unordered_map<std::string, SemanticTypeRef> domain_base_types;
+    std::unordered_map<std::string, std::vector<SemanticFunctionIR>> domain_member_functions;
     std::vector<CppSourceMapEntry> source_map;
     std::string current_return_value_name;
     bool current_function_has_ensures = false;
@@ -39,32 +42,11 @@ struct CppEmitContext {
     }
 };
 
-static std::string sanitizeIdentifier(const std::string& name) {
-    static const std::set<std::string> cpp_keywords = {
-        "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool", "break",
-        "case", "catch", "char", "char8_t", "char16_t", "char32_t", "class", "compl", "concept",
-        "const", "consteval", "constexpr", "constinit", "const_cast", "continue", "co_await", "co_return",
-        "co_yield", "decltype", "default", "delete", "do", "double", "dynamic_cast", "else", "enum",
-        "explicit", "export", "extern", "false", "float", "for", "friend", "goto", "if", "inline", "int",
-        "long", "mutable", "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or",
-        "or_eq", "private", "protected", "public", "register", "reinterpret_cast", "requires", "return",
-        "short", "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch", "template",
-        "this", "thread_local", "throw", "true", "try", "typedef", "typeid", "typename", "union", "unsigned",
-        "using", "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq"
-    };
-
-    if (cpp_keywords.find(name) != cpp_keywords.end()) {
-        return name + "_cp";
-    }
-
-    return name;
-}
-
 static std::string mapPrimitiveType(const std::string& type_name, CppEmitContext& context) {
     if (type_name == "bool") return "bool";
     if (type_name == "void") return "void";
 
-    context.required_headers.insert("\"src/runtime/c-prime.hpp\"");
+    context.required_headers.insert("\"c-prime.hpp\"");
 
     if (type_name == "char8") return "cprime::char8";
     if (type_name == "char16") return "cprime::char16";
@@ -80,7 +62,7 @@ static std::string mapPrimitiveType(const std::string& type_name, CppEmitContext
     if (type_name == "float32") return "cprime::float32";
     if (type_name == "float64") return "cprime::float64";
 
-    return sanitizeIdentifier(type_name);
+    return type_name;
 }
 
 static std::string indent(size_t depth) {

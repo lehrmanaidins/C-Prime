@@ -101,9 +101,31 @@ static ParsedPhrases parseCPrimeFileWithImports(const std::string& filename, boo
     return parseCPrimeFileWithImports(filename, debug, importing);
 }
 
+// The prelude is embedded in the binary and lexed straight from the embedded
+// source. Any `import` of a runtime header it contains is dropped: the runtime
+// headers (c-prime.hpp / std.hpp) are always emitted into the generated C++ and
+// their symbols are always registered from the embedded copies, so the prelude
+// does not need to pull them in explicitly.
+static ParsedPhrases parseEmbeddedPrelude(bool debug) {
+    Tokens tokens = lexSource(std::string(embedded::std_hprime()));
+    Phrases phrases = preparseTokens(tokens);
+    ParsedPhrases parsed = parsePhrases(phrases);
+
+    ParsedPhrases without_imports{};
+    for (const auto& phrase : parsed) {
+        if (phrase && phrase->kind != ParsedPhraseKind::ImportStatement) {
+            without_imports.push_back(phrase);
+        }
+    }
+
+    if (debug) {
+        std::cout << "Loaded " << without_imports.size() << " phrases from the embedded prelude\n";
+    }
+    return without_imports;
+}
+
 static int runCompiler(const CliOptions& options) {
     const std::string& filename = options.filename;
-    const std::string prelude_filename = "src/runtime/c-prime.cprime";
     std::cout << "C-Prime Compiler\n";
 
     if (!fileExists(filename)) {
@@ -113,7 +135,7 @@ static int runCompiler(const CliOptions& options) {
 
     try {
         std::unordered_set<std::string> importing{};
-        ParsedPhrases parsed_phrases = parseCPrimeFileWithImports(prelude_filename, options.debug, importing);
+        ParsedPhrases parsed_phrases = parseEmbeddedPrelude(options.debug);
         for (const auto& prelude_phrase : parsed_phrases) {
             if (prelude_phrase) {
                 clearPhraseTrivia(prelude_phrase->source_phrase);
@@ -134,6 +156,7 @@ static int runCompiler(const CliOptions& options) {
         CppEmitResult emitted = emitCpp(semantic_program);
         const std::string output_filename = defaultCppOutputFilename(options);
         writeTextFile(output_filename, emitted.code);
+        writeRuntimeHeadersBeside(output_filename);
 
         if (shouldEmitCppFile(options)) {
             std::cout << "Generated C++ written to: " << output_filename << "\n";

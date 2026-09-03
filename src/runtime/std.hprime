@@ -1,0 +1,19 @@
+
+import "std.hpp";
+
+union UnsignedInteger : primitive uint8 | primitive uint16 | primitive uint32 | primitive uint64;
+union SignedInteger : primitive int8 | primitive int16 | primitive int32 | primitive int64;
+
+union Integer : UnsignedInteger | SignedInteger;
+union Floating : primitive float32 | primitive float64;
+
+union Number : Integer | Floating;
+
+union Character : primitive char8 | primitive char16 | primitive char32;
+union Boolean : primitive bool;
+
+union Primitive : Number | Character | Boolean;
+
+type String : Character[];
+
+type Size : primitive uint64;

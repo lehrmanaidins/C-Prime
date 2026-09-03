@@ -74,17 +74,17 @@ static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& cont
         }
         base += ">";
     } else if (resolved_type.kind == SemanticTypeKind::Reference && resolved_type.reference_target) {
-        context.required_headers.insert("\"src/runtime/c-prime-types.hpp\"");
+        context.required_headers.insert("\"std.hpp\"");
         const std::string qualifier = resolved_type.reference_target->is_mutable ? "" : "const ";
         base = "cprime::reference<" + qualifier + emitTypeRef(*resolved_type.reference_target, context) + ">";
     } else if (resolved_type.kind == SemanticTypeKind::Pointer && resolved_type.pointer_target) {
-        context.required_headers.insert("\"src/runtime/c-prime-types.hpp\"");
+        context.required_headers.insert("\"std.hpp\"");
         const std::string qualifier = resolved_type.pointer_target->is_mutable ? "" : "const ";
         base = "cprime::pointer<" + qualifier + emitTypeRef(*resolved_type.pointer_target, context) + ">";
     } else if (resolved_type.kind == SemanticTypeKind::Function) {
         base = "auto";
     } else if (!resolved_type.generic_arguments.empty()) {
-        base = sanitizeIdentifier(resolved_type.name) + "<";
+        base = resolved_type.name + "<";
         for (size_t i = 0; i < resolved_type.generic_arguments.size(); ++i) {
             if (i > 0) base += ", ";
             base += emitTypeRef(resolved_type.generic_arguments[i], context);

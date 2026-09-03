@@ -11,6 +11,6 @@ static void emitVariableDeclarationStatement(
     context.pushLine(var.location, "var");
     const std::string type_str = emitTypeRef(var.type, context);
     const std::string qualifier = var.is_mutable ? "" : "const ";
-    const std::string declarator = qualifier + type_str + " " + sanitizeIdentifier(var.name);
+    const std::string declarator = qualifier + type_str + " " + var.name;
     appendLine(output, context, indent_str + declarator + " = " + emitVariableInitializer(var, context) + ";");
 }

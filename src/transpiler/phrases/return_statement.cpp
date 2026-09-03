@@ -13,7 +13,7 @@ static void emitReturnStatement(
         appendLine(output, context, indent_str + "return;");
     } else {
         if (context.current_function_has_ensures && !context.current_return_value_name.empty()) {
-            const std::string return_name = sanitizeIdentifier(context.current_return_value_name);
+            const std::string return_name = context.current_return_value_name;
             appendLine(output, context, indent_str + "const auto " + return_name + " = " + emitExpression(ret.expression, context) + ";");
             context.required_headers.insert("<stdexcept>");
             appendLine(output, context, indent_str + "if (!(" + emitExpression(context.current_function_ensures_clause, context) + ")) { throw std::runtime_error(\"function ensures clause violated\"); }");

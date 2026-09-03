@@ -49,10 +49,6 @@
 + // Unary plus
 - // Unary minus
 
-// Bicremental Operators
-++ // Increment
--- // Decrement
-
 // Relational operators
 == // Equal to
 != // Not equal to
@@ -87,25 +83,41 @@
 &= // Bitwise AND assignment
 |= // Bitwise OR assignment
 ^= // Bitwise XOR assignment
+~= // Bitwise NOT assignment
 <<= // Left shift assignment
 >>= // Right shift assignment
 
-// Separators
-, // Comma
-. // Dot
-; // Semicolon
+// Member Access
+. // Member Access Operator
+-> // 
 
-// Grouping, Scope, and Indexing symbols
-( // Left parenthesis
-) // Right parenthesis
-{ // Left brace
-} // Right brace
-[ // Left bracket
-] // Right bracket
+// Inheritance
+: // Inheritance Operator
+:: // 
 
-// Comment Markers
-// // Single-line comment
-/* */ // Multi-line comment
+// Grouping
+( // Left Grouping Operator
+) // Right Grouping Operator
+
+// Scope
+{ // Left Scope Operator
+} // Right Scope Operator
+
+// Collections
+[ // Left Index Access Operator
+] // Right Index Access Operator
+{ // Left Array Literal Operator
+} // Right Array Literal Operator
+( // Left Tuple Literal Operator
+) // Right Tuple Literal Operator
+
+// Templates
+< // Left Template Operator
+> // Right Template Operator
+
+// Metaprogramming
+@ // Attribute Operator
+# // Preprocessor Operator
 ```
 
 ## Variables

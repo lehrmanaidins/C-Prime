@@ -1,0 +1,18 @@
+# Static analysis for the transpiler's generated C++. Focused on checks that
+# catch real code-generation bugs rather than style.
+Checks: >
+  bugprone-*,
+  -bugprone-suspicious-include,
+  clang-analyzer-*,
+  concurrency-*,
+  misc-*,
+  -misc-use-internal-linkage,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -readability-identifier-length,
+  -readability-magic-numbers
+WarningsAsErrors: '*'
+# Only analyse the generated translation unit, not the runtime headers.
+HeaderFilterRegex: '$^'

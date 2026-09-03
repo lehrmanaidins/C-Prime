@@ -2,9 +2,13 @@
 
 #include <fstream>
 #include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
+
+#include "../embedded/resources.hpp"
 
 struct CppImportTypeInfo {
     std::string cprime_name;
@@ -137,9 +141,23 @@ static void scanCppSymbolLines(const std::vector<std::string>& lines, SemanticSy
     const std::regex value_regex(R"(^\s*(?:static\s+|inline\s+|constexpr\s+|const\s+)*([A-Za-z_][\w:<>\s,&*]*)\s+([A-Za-z_]\w*)\s*(?:=|;))");
 
     bool pending_variadic_template = false;
+    bool in_macro_definition = false;
 
     for (std::string line : lines) {
         line = stripCppLineComment(line);
+
+        // Preprocessor directives, and the continued body lines of a multi-line
+        // #define, are not real declarations. Skipping them keeps a `struct T {`
+        // that appears inside a macro definition from being registered as a type.
+        const std::string trimmed_line = trim(line);
+        if (in_macro_definition) {
+            in_macro_definition = !trimmed_line.empty() && trimmed_line.back() == '\\';
+            continue;
+        }
+        if (!trimmed_line.empty() && trimmed_line.front() == '#') {
+            in_macro_definition = trimmed_line.back() == '\\';
+            continue;
+        }
 
         if (isCppVariadicTemplateLine(line)) {
             pending_variadic_template = true;
@@ -193,14 +211,21 @@ static void scanCppSymbolLines(const std::vector<std::string>& lines, SemanticSy
     }
 }
 
-static std::vector<std::string> readAllLines(const std::string& path) {
-    std::ifstream file(path);
+static std::vector<std::string> splitTextLines(std::string_view text) {
     std::vector<std::string> lines{};
+    std::istringstream stream{std::string(text)};
     std::string line;
-    while (std::getline(file, line)) {
+    while (std::getline(stream, line)) {
         lines.push_back(line);
     }
     return lines;
+}
+
+static std::vector<std::string> readAllLines(const std::string& path) {
+    std::ifstream file(path);
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return splitTextLines(buffer.str());
 }
 
 static void registerCppImportSymbols(const std::string& path, SemanticSymbolTable& symbols) {
@@ -219,9 +244,10 @@ static void registerCppImportSymbols(const std::string& path, SemanticSymbolTabl
     scanCppSymbolLines(lines, symbols);
 }
 
-// Scans the always-included runtime header itself, so builtins like print/println
-// are ordinary functions provided by src/runtime/c-prime.hpp rather than compiler keywords.
+// Scans the always-included runtime headers themselves, so builtins like
+// print/println and library types like reference/pointer are ordinary symbols
+// provided by the runtime rather than compiler keywords.
 static void registerRuntimeSymbols(SemanticSymbolTable& symbols) {
-    const std::vector<std::string> lines = readAllLines("src/runtime/c-prime.hpp");
-    scanCppSymbolLines(lines, symbols);
+    scanCppSymbolLines(splitTextLines(embedded::runtime_hpp()), symbols);
+    scanCppSymbolLines(splitTextLines(embedded::std_hpp()), symbols);
 }
