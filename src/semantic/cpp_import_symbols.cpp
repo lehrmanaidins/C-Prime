@@ -249,5 +249,6 @@ static void registerCppImportSymbols(const std::string& path, SemanticSymbolTabl
 // provided by the runtime rather than compiler keywords.
 static void registerRuntimeSymbols(SemanticSymbolTable& symbols) {
     scanCppSymbolLines(splitTextLines(embedded::runtime_hpp()), symbols);
-    scanCppSymbolLines(splitTextLines(embedded::std_hpp()), symbols);
+    scanCppSymbolLines(splitTextLines(embedded::io_hpp()), symbols);
+    scanCppSymbolLines(splitTextLines(embedded::memory_hpp()), symbols);
 }

@@ -3,6 +3,7 @@
 Checks: >
   bugprone-*,
   -bugprone-suspicious-include,
+  -bugprone-exception-escape,
   clang-analyzer-*,
   concurrency-*,
   misc-*,

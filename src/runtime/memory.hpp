@@ -1,11 +1,5 @@
 
-#ifndef CPRIME_RUNTIME_TYPES_HPP
-#define CPRIME_RUNTIME_TYPES_HPP
-
-// C-Prime Standard Library.
-
 #include <optional>
-#include <type_traits>
 
 namespace cprime {
     template <typename T>
@@ -58,17 +52,5 @@ namespace cprime {
 
     template <typename T>
     pointer(T&) -> pointer<T>;
-}
 
-template <typename... Args>
-void print(const Args&... args) {
-    (std::cout << ... << args);
 }
-
-template <typename... Args>
-void println(const Args&... args) {
-    print(args...);
-    std::cout << '\n';
-}
-
-#endif  // CPRIME_RUNTIME_TYPES_HPP

@@ -8,27 +8,25 @@
   ],
   "patterns": [
     { "include": "#comments" },
-      { "include": "#attributes" },
+    { "include": "#attributes" },
+    { "include": "#preprocessor" },
     { "include": "#strings" },
     { "include": "#chars" },
     { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#casts" },
     { "include": "#keywords" },
+    { "include": "#constants" },
     { "include": "#types" },
+    { "include": "#builtins" },
     { "include": "#functions" },
     { "include": "#operators" }
   ],
   "repository": {
     "comments": {
       "patterns": [
-        {
-          "name": "comment.line.double-slash.cprime",
-          "match": "//.*$"
-        },
-        {
-          "name": "comment.block.cprime",
-          "begin": "/\\*",
-          "end": "\\*/"
-        }
+        { "name": "comment.line.double-slash.cprime", "match": "//.*$" },
+        { "name": "comment.block.cprime", "begin": "/\\*", "end": "\\*/" }
       ]
     },
     "strings": {
@@ -49,13 +47,43 @@
     },
     "numbers": {
       "patterns": [
+        { "name": "constant.numeric.float.cprime", "match": "\\b\\d+\\.\\d+(?:[eE][+-]?\\d+)?\\b" },
+        { "name": "constant.numeric.integer.cprime", "match": "\\b(?:0[xX][0-9A-Fa-f]+|0[bB][01]+|\\d+)\\b" }
+      ]
+    },
+    "declarations": {
+      "patterns": [
         {
-          "name": "constant.numeric.integer.cprime",
-          "match": "\\b(?:0[xX][0-9A-Fa-f]+|\\d+)\\b"
+          "match": "\\b(type|alias)\\s+([A-Za-z_]\\w*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.type.cprime" },
+            "2": { "name": "entity.name.type.cprime" }
+          }
         },
         {
-          "name": "constant.numeric.float.cprime",
-          "match": "\\b\\d+\\.\\d+(?:[eE][+-]?\\d+)?\\b"
+          "match": "\\b(struct|union)\\s+([A-Za-z_]\\w*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.struct.cprime" },
+            "2": { "name": "entity.name.type.cprime" }
+          }
+        },
+        {
+          "match": "\\b(enum)\\s+([A-Za-z_]\\w*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.enum.cprime" },
+            "2": { "name": "entity.name.type.cprime" }
+          }
+        },
+        {
+          "match": "\\b(function)\\s+([A-Za-z_]\\w*)",
+          "captures": {
+            "1": { "name": "keyword.declaration.function.cprime" },
+            "2": { "name": "entity.name.function.cprime" }
+          }
+        },
+        {
+          "match": "\\b(template)\\b",
+          "name": "keyword.declaration.template.cprime"
         }
       ]
     },
@@ -63,40 +91,83 @@
       "patterns": [
         {
           "name": "keyword.control.cprime",
-          "match": "\\b(?:if|else|switch|case|default|for|foreach|while|do|loop|break|continue|limit|return|requires|ensures|result|old|unsafe|const|mutable|type|alias|struct|enum|union|function|template|void|true|false|null|import|pure|entry|critical|interrupt)\\b"
+          "match": "\\b(?:if|else|switch|case|default|for|foreach|while|do|loop|limit|break|continue|return)\\b"
+        },
+        {
+          "name": "keyword.other.contract.cprime",
+          "match": "\\b(?:requires|ensures|debug|release)\\b"
+        },
+        {
+          "name": "storage.modifier.cprime",
+          "match": "\\b(?:const|mutable|primitive|unsafe|alias|pure|entry|critical|interrupt|discard)\\b"
+        },
+        {
+          "name": "keyword.declaration.cprime",
+          "match": "\\b(?:type|struct|enum|union|function|template|import)\\b"
         }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        { "name": "constant.language.cprime", "match": "\\b(?:true|false|null|void)\\b" },
+        { "name": "constant.other.cprime", "match": "\\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\\b" }
       ]
     },
     "types": {
       "patterns": [
         {
-          "name": "storage.type.cprime",
-          "match": "\\b(?:primitive|reference|pointer|array|list|uint8|uint16|uint32|uint64|int8|int16|int32|int64|float16|float32|float64|float128|char8|char16|char32|bool)\\b"
+          "name": "storage.type.primitive.cprime",
+          "match": "\\b(?:uint8|uint16|uint32|uint64|int8|int16|int32|int64|float16|float32|float64|float128|char8|char16|char32|bool)\\b"
+        },
+        {
+          "name": "storage.type.builtin.cprime",
+          "match": "\\b(?:reference|pointer|array|optional)\\b"
+        },
+        {
+          "name": "entity.name.type.cprime",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "casts": {
+      "patterns": [
+        {
+          "name": "support.function.cast.cprime",
+          "match": "\\b(?:widen_cast|narrow_cast|underlying_cast|reinterpret_cast|array_fill)\\b(?=\\s*<)"
+        }
+      ]
+    },
+    "builtins": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.cprime",
+          "match": "\\b(?:print|println|sizeof|alignof|offsetof|static_assert|assert)\\b(?=\\s*\\()"
         }
       ]
     },
     "functions": {
       "patterns": [
         {
-          "name": "entity.name.function.cprime",
-          "match": "(?<=\\bfunction\\s)[A-Za-z_][A-Za-z0-9_]*|\\b(?:print|println|array_fill|widen_cast|narrow_cast|underlying_cast|reinterpret_cast)\\s*(?=\\()"
+          "name": "entity.name.function.call.cprime",
+          "match": "\\b([A-Za-z_]\\w*)\\s*(?=\\()"
         }
       ]
     },
     "attributes": {
       "patterns": [
-        {
-          "name": "storage.modifier.attribute.cprime",
-          "match": "@[A-Za-z_][A-Za-z0-9_]*"
-        }
+        { "name": "storage.modifier.attribute.cprime", "match": "@[A-Za-z_][A-Za-z0-9_]*" }
+      ]
+    },
+    "preprocessor": {
+      "patterns": [
+        { "name": "keyword.control.directive.cprime", "match": "^\\s*#[A-Za-z_]\\w*" }
       ]
     },
     "operators": {
       "patterns": [
-        {
-          "name": "keyword.operator.cprime",
-          "match": "[=+\\-*/%<>!&|^~:.,;\\[\\]{}()\\?]"
-        }
+        { "name": "keyword.operator.arrow.cprime", "match": "->" },
+        { "name": "keyword.operator.scope.cprime", "match": "::" },
+        { "name": "keyword.operator.cprime", "match": "\\*\\*=?|<<=?|>>=?|[-+*/%&|^~!<>=]=?|&&|\\|\\||[:.,;?]" }
       ]
     }
   }

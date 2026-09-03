@@ -14,6 +14,7 @@ set_property(TARGET c-prime APPEND PROPERTY OBJECT_DEPENDS
     ${CMAKE_SOURCE_DIR}/src/lists/keywords.txt
     ${CMAKE_SOURCE_DIR}/src/lists/primitives.txt
     ${CMAKE_SOURCE_DIR}/src/lists/operators.txt
+    ${CMAKE_SOURCE_DIR}/src/lists/cpp_builtins.txt
     ${CMAKE_SOURCE_DIR}/src/runtime/c-prime.hpp
     ${CMAKE_SOURCE_DIR}/src/runtime/std.hpp
     ${CMAKE_SOURCE_DIR}/src/runtime/std.hprime

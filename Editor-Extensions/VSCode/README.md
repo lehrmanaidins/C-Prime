@@ -22,7 +22,7 @@ npm run package
 Then install the generated package globally for your VS Code user:
 
 ```bash
-code --install-extension c-prime-syntax-0.1.0.vsix
+code --install-extension c-prime-syntax-0.2.0.vsix
 ```
 
 Restart or reload VS Code, then open a `.cprime` or `.hprime` file.

@@ -38,16 +38,24 @@ inline constexpr unsigned char operators_txt_data[] = {0,
 #embed "../lists/operators.txt"
 };
 
+inline constexpr unsigned char cpp_builtins_txt_data[] = {0,
+#embed "../lists/cpp_builtins.txt"
+};
+
 inline constexpr unsigned char runtime_hpp_data[] = {0,
 #embed "../runtime/c-prime.hpp"
 };
 
-inline constexpr unsigned char std_hpp_data[] = {0,
-#embed "../runtime/std.hpp"
+inline constexpr unsigned char io_hpp_data[] = {0,
+#embed "../runtime/io.hpp"
 };
 
 inline constexpr unsigned char std_hprime_data[] = {0,
 #embed "../runtime/std.hprime"
+};
+
+inline constexpr unsigned char memory_hpp_data[] = {0,
+#embed "../runtime/memory.hpp"
 };
 
 #pragma clang diagnostic pop
@@ -63,8 +71,10 @@ inline std::string_view delimiters_txt() { return asText(delimiters_txt_data, si
 inline std::string_view keywords_txt() { return asText(keywords_txt_data, sizeof(keywords_txt_data)); }
 inline std::string_view primitives_txt() { return asText(primitives_txt_data, sizeof(primitives_txt_data)); }
 inline std::string_view operators_txt() { return asText(operators_txt_data, sizeof(operators_txt_data)); }
+inline std::string_view cpp_builtins_txt() { return asText(cpp_builtins_txt_data, sizeof(cpp_builtins_txt_data)); }
 inline std::string_view runtime_hpp() { return asText(runtime_hpp_data, sizeof(runtime_hpp_data)); }
-inline std::string_view std_hpp() { return asText(std_hpp_data, sizeof(std_hpp_data)); }
+inline std::string_view io_hpp() { return asText(io_hpp_data, sizeof(io_hpp_data)); }
 inline std::string_view std_hprime() { return asText(std_hprime_data, sizeof(std_hprime_data)); }
+inline std::string_view memory_hpp() { return asText(memory_hpp_data, sizeof(memory_hpp_data)); }
 
 }  // namespace embedded

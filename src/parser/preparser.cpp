@@ -34,6 +34,9 @@ static bool phraseIntroducesScope(const std::vector<std::shared_ptr<Token>>& tok
         || tokens[start]->value == "if"
         || tokens[start]->value == "while"
         || tokens[start]->value == "for"
+        || tokens[start]->value == "foreach"
+        || tokens[start]->value == "do"
+        || tokens[start]->value == "loop"
         || tokens[start]->value == "else"
     )) {
         return true;

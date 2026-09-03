@@ -19,7 +19,7 @@ static std::string emitExpression(const SemanticExpressionIR& expression, CppEmi
         case SemanticExpressionKind::Call: {
             std::string callee = expression.operator_symbol;
             if (expression.operator_symbol == "pointer" || expression.operator_symbol == "reference") {
-                context.required_headers.insert("\"std.hpp\"");
+                context.required_headers.insert("\"memory.hpp\"");
                 callee = "cprime::" + expression.operator_symbol;
             }
             std::string call = callee + "(";

@@ -8,6 +8,28 @@
     ],
     "description": "Declare a C-Prime function"
   },
+  "Template function": {
+    "prefix": "template",
+    "body": [
+      "template <type ${1:T}>",
+      "function ${2:name}(${3:${1} value}) -> ${4:${1}} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Declare a generic function"
+  },
+  "Function with contracts": {
+    "prefix": "contract",
+    "body": [
+      "function ${1:name}(${2:primitive uint32 a}) -> ${3:primitive uint32} ${4:result}",
+      "    requires ${5:a >= 0};",
+      "    ensures ${6:${4} == a};",
+      "{",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Function with requires/ensures contracts"
+  },
   "Structure": {
     "prefix": "struct",
     "body": [
@@ -15,11 +37,103 @@
       "    ${0}",
       "};"
     ],
-    "description": "Declare a C-Prime structure"
+    "description": "Declare a struct"
+  },
+  "Domain type": {
+    "prefix": "type",
+    "body": "type ${1:Name} : ${2:primitive uint32};",
+    "description": "Declare a domain type over an underlying type"
+  },
+  "Enum": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:Name}${2: : primitive ${3:uint8}} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Declare an enum with an optional underlying type"
+  },
+  "Union": {
+    "prefix": "union",
+    "body": "union ${1:Name} : ${2:primitive uint32} | ${3:primitive uint64};",
+    "description": "Declare a type union"
+  },
+  "Import": {
+    "prefix": "import",
+    "body": "import \"${1:path}\";",
+    "description": "Import a .cprime / .hprime / .cpp / .hpp file"
   },
   "Mutable variable": {
     "prefix": "mutable",
     "body": "mutable primitive ${1:uint32} ${2:name} = ${3:0};",
     "description": "Declare a mutable primitive variable"
+  },
+  "Constant variable": {
+    "prefix": "const",
+    "body": "const primitive ${1:uint32} ${2:name} = ${3:0};",
+    "description": "Declare a constant primitive variable"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": [
+      "for (mutable primitive uint32 ${1:i} = 0; ${1} < ${2:count}; ${1} = ${1} + 1)${3: limit (${4:1000})} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Counted for loop with an optional limit clause"
+  },
+  "Foreach loop": {
+    "prefix": "foreach",
+    "body": [
+      "foreach (${1:ElementType} ${2:element} in ${3:collection}) {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Iterate over a collection"
+  },
+  "While loop": {
+    "prefix": "while",
+    "body": [
+      "while (${1:condition})${2: limit (${3:1000})} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "While loop with an optional limit clause"
+  },
+  "Do-while loop": {
+    "prefix": "do",
+    "body": [
+      "do {",
+      "    ${0}",
+      "} while (${1:condition});"
+    ],
+    "description": "Do-while loop"
+  },
+  "Endless loop": {
+    "prefix": "loop",
+    "body": [
+      "loop${1: limit (${2:1000})} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Endless loop, ended by break or a limit clause"
+  },
+  "If / else": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "If statement"
+  },
+  "Unsafe block": {
+    "prefix": "unsafe",
+    "body": [
+      "unsafe {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Unsafe block"
   }
 }

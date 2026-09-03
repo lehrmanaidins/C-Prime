@@ -1,5 +1,13 @@
 
-import "std.hpp";
+import "io.hpp";
+import "memory.hpp";
+
+primitive char8  CHAR8_MAX = UINT8_MAX;
+primitive char8  CHAR8_MIN = 0;
+primitive char16 CHAR16_MAX = UINT16_MAX;
+primitive char16 CHAR16_MIN = 0;
+primitive char32 CHAR32_MAX = UINT32_MAX;
+primitive char32 CHAR32_MIN = 0;
 
 union UnsignedInteger : primitive uint8 | primitive uint16 | primitive uint32 | primitive uint64;
 union SignedInteger : primitive int8 | primitive int16 | primitive int32 | primitive int64;

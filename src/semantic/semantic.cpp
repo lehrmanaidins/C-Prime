@@ -163,16 +163,33 @@ struct SemanticIfIR {
     SourceLocation location;
 };
 
+// `while`, `do`/`while`, and the endless `loop` all lower into SemanticWhileIR
+// and are told apart by `loop_kind`.
+enum class SemanticLoopKind {
+    While,
+    DoWhile,
+    Endless
+};
+
 struct SemanticWhileIR {
+    SemanticLoopKind loop_kind = SemanticLoopKind::While;
     SemanticExpressionIR condition;
+    std::string limit;  // empty when there is no `limit (...)` clause
     std::vector<SemanticStatementRef> body;
     SourceLocation location;
 };
 
+// A C-style `for` and a `foreach` both lower into SemanticForIR. When
+// `is_foreach` is set, `foreach_type`/`foreach_name` name the element binding and
+// `initializer` carries the collection expression.
 struct SemanticForIR {
+    bool is_foreach = false;
+    std::string foreach_type;
+    std::string foreach_name;
     SemanticExpressionIR initializer;
     SemanticExpressionIR condition;
     SemanticExpressionIR update;
+    std::string limit;
     std::vector<SemanticStatementRef> body;
     SourceLocation location;
 };
@@ -277,6 +294,10 @@ struct SemanticSymbolTable {
     std::unordered_set<std::string> variadic_functions;
     std::unordered_map<std::string, VariableSymbol> external_values;
     std::unordered_map<std::string, std::unordered_map<std::string, size_t>> type_member_functions;
+    // C++ builtins (src/lists/cpp_builtins.txt) that pass straight through to the
+    // generated C++: accepted as a value, and accepted in call position with any
+    // arguments (arguments unchecked, so type names may appear inside them).
+    std::unordered_set<std::string> cpp_builtins;
     bool has_cpp_imports = false;
 };
 
@@ -827,7 +848,8 @@ static void validateExpression(
     if (expression.kind == SemanticExpressionKind::Identifier) {
         const std::string name = trim(expression.text);
         if (lookupVariable(context, name) == nullptr
-            && context.symbols.external_values.find(name) == context.symbols.external_values.end()) {
+            && context.symbols.external_values.find(name) == context.symbols.external_values.end()
+            && context.symbols.cpp_builtins.find(name) == context.symbols.cpp_builtins.end()) {
             throw semanticError(phrase, "unknown value '" + name + "'");
         }
         return;
@@ -851,6 +873,11 @@ static void validateExpression(
     }
 
     if (expression.kind == SemanticExpressionKind::Call) {
+        if (context.symbols.cpp_builtins.find(expression.operator_symbol) != context.symbols.cpp_builtins.end()) {
+            // e.g. `sizeof(uint32)` — passed through verbatim; arguments may be
+            // type names, so they are not validated as value expressions.
+            return;
+        }
         if (expression.operator_symbol == "pointer") {
             if (context.unsafe_depth == 0) {
                 throw semanticError(phrase, "'pointer()' can only be called inside an unsafe block or unsafe function");
@@ -998,6 +1025,28 @@ static void analyzeForStatement(const std::shared_ptr<ParsedForStatement>& for_p
 
     ++context.loop_depth;
     analyzePhraseList(for_phrase->nested_phrases, context);
+    --context.loop_depth;
+    leaveScope(context);
+}
+
+static void analyzeForeachStatement(const std::shared_ptr<ParsedForeachStatement>& foreach_phrase, ValidationContext& context) {
+    if (!foreach_phrase) {
+        return;
+    }
+
+    enterScope(context);
+    if (!foreach_phrase->element_type.empty() && !isKnownTypeRefString(context.symbols, foreach_phrase->element_type)) {
+        throw semanticError(foreach_phrase, "unknown element type '" + foreach_phrase->element_type + "' in foreach");
+    }
+    if (!foreach_phrase->collection.empty()) {
+        validateExpression(foreach_phrase, parseExpressionIR(foreach_phrase->collection, phraseStartLocation(foreach_phrase)), context);
+    }
+    if (!foreach_phrase->element_name.empty()) {
+        declareVariable(context, foreach_phrase->element_name, normalizeTypeName(foreach_phrase->element_type), false, foreach_phrase);
+    }
+
+    ++context.loop_depth;
+    analyzePhraseList(foreach_phrase->nested_phrases, context);
     --context.loop_depth;
     leaveScope(context);
 }
@@ -1524,13 +1573,28 @@ static void analyzePhrase(const std::shared_ptr<ParsedPhrase>& phrase, Validatio
         case ParsedPhraseKind::ElseStatement:
             analyzeControlFlowBody(phrase, context);
             break;
-        case ParsedPhraseKind::WhileStatement:
+        case ParsedPhraseKind::WhileStatement: {
+            auto while_phrase = std::dynamic_pointer_cast<ParsedWhileStatement>(phrase);
+            const std::string condition = while_phrase ? trim(while_phrase->condition) : "";
+            if (condition == "true" || condition == "1") {
+                throw semanticError(phrase, "`while (true)` is not allowed in C-Prime; use `loop` for an endless loop");
+            }
+            ++context.loop_depth;
+            analyzeControlFlowBody(phrase, context);
+            --context.loop_depth;
+            break;
+        }
+        case ParsedPhraseKind::DoWhileStatement:
+        case ParsedPhraseKind::LoopStatement:
             ++context.loop_depth;
             analyzeControlFlowBody(phrase, context);
             --context.loop_depth;
             break;
         case ParsedPhraseKind::ForStatement:
             analyzeForStatement(std::dynamic_pointer_cast<ParsedForStatement>(phrase), context);
+            break;
+        case ParsedPhraseKind::ForeachStatement:
+            analyzeForeachStatement(std::dynamic_pointer_cast<ParsedForeachStatement>(phrase), context);
             break;
         case ParsedPhraseKind::UnsafeBlock:
             ++context.unsafe_depth;
@@ -1588,6 +1652,10 @@ static SemanticSymbolTable collectSymbols(const ParsedPhrases& phrases) {
     symbols.function_parameter_counts["reference"] = 1;
 
     registerRuntimeSymbols(symbols);
+
+    for (const auto& builtin : loadTermsFromText(embedded::cpp_builtins_txt())) {
+        symbols.cpp_builtins.insert(builtin);
+    }
 
     for (const auto& phrase : phrases) {
         collectSymbolsFromPhrase(phrase, symbols);
@@ -1951,7 +2019,9 @@ static void lowerBodyPhrases(
             case ParsedPhraseKind::WhileStatement: {
                     auto while_phrase = std::dynamic_pointer_cast<ParsedWhileStatement>(phrase);
                     SemanticWhileIR node{};
+                    node.loop_kind = SemanticLoopKind::While;
                     node.condition = parseExpressionIR(while_phrase ? while_phrase->condition : "", phraseStartLocation(phrase));
+                    node.limit = while_phrase ? while_phrase->limit : "";
                     node.location = phraseStartLocation(phrase);
                     lowerBodyPhrases(
                         phrase->nested_phrases,
@@ -1975,12 +2045,46 @@ static void lowerBodyPhrases(
                     order.push_back({SemanticStatementKind::While, while_statements.size() - 1});
                 break;
             }
+            case ParsedPhraseKind::LoopStatement: {
+                    auto loop_phrase = std::dynamic_pointer_cast<ParsedLoopStatement>(phrase);
+                    SemanticWhileIR node{};
+                    node.loop_kind = SemanticLoopKind::Endless;
+                    node.limit = loop_phrase ? loop_phrase->limit : "";
+                    node.location = phraseStartLocation(phrase);
+                    lowerBodyPhrases(
+                        phrase->nested_phrases,
+                        variable_declarations, assignments, type_definitions, struct_definitions,
+                        enum_definitions, imports, calls, returns, if_statements, while_statements,
+                        for_statements, else_statements, node.body, symbols, trivia_sink
+                    );
+                    while_statements.push_back(node);
+                    order.push_back({SemanticStatementKind::While, while_statements.size() - 1});
+                break;
+            }
+            case ParsedPhraseKind::DoWhileStatement: {
+                    auto do_while_phrase = std::dynamic_pointer_cast<ParsedDoWhileStatement>(phrase);
+                    SemanticWhileIR node{};
+                    node.loop_kind = SemanticLoopKind::DoWhile;
+                    node.condition = parseExpressionIR(do_while_phrase ? do_while_phrase->condition : "", phraseStartLocation(phrase));
+                    node.limit = do_while_phrase ? do_while_phrase->limit : "";
+                    node.location = phraseStartLocation(phrase);
+                    lowerBodyPhrases(
+                        phrase->nested_phrases,
+                        variable_declarations, assignments, type_definitions, struct_definitions,
+                        enum_definitions, imports, calls, returns, if_statements, while_statements,
+                        for_statements, else_statements, node.body, symbols, trivia_sink
+                    );
+                    while_statements.push_back(node);
+                    order.push_back({SemanticStatementKind::While, while_statements.size() - 1});
+                break;
+            }
             case ParsedPhraseKind::ForStatement: {
                     auto for_phrase = std::dynamic_pointer_cast<ParsedForStatement>(phrase);
                     SemanticForIR node{};
                     node.initializer = parseExpressionIR(for_phrase ? for_phrase->initializer : "", phraseStartLocation(phrase));
                     node.condition = parseExpressionIR(for_phrase ? for_phrase->condition : "", phraseStartLocation(phrase));
                     node.update = parseExpressionIR(for_phrase ? for_phrase->update : "", phraseStartLocation(phrase));
+                    node.limit = for_phrase ? for_phrase->limit : "";
                     node.location = phraseStartLocation(phrase);
                     lowerBodyPhrases(
                         phrase->nested_phrases,
@@ -1999,6 +2103,25 @@ static void lowerBodyPhrases(
                         node.body,
                         symbols,
                         trivia_sink
+                    );
+                    for_statements.push_back(node);
+                    order.push_back({SemanticStatementKind::For, for_statements.size() - 1});
+                break;
+            }
+            case ParsedPhraseKind::ForeachStatement: {
+                    auto foreach_phrase = std::dynamic_pointer_cast<ParsedForeachStatement>(phrase);
+                    SemanticForIR node{};
+                    node.is_foreach = true;
+                    node.foreach_type = foreach_phrase ? foreach_phrase->element_type : "";
+                    node.foreach_name = foreach_phrase ? foreach_phrase->element_name : "";
+                    node.initializer = parseExpressionIR(foreach_phrase ? foreach_phrase->collection : "", phraseStartLocation(phrase));
+                    node.limit = foreach_phrase ? foreach_phrase->limit : "";
+                    node.location = phraseStartLocation(phrase);
+                    lowerBodyPhrases(
+                        phrase->nested_phrases,
+                        variable_declarations, assignments, type_definitions, struct_definitions,
+                        enum_definitions, imports, calls, returns, if_statements, while_statements,
+                        for_statements, else_statements, node.body, symbols, trivia_sink
                     );
                     for_statements.push_back(node);
                     order.push_back({SemanticStatementKind::For, for_statements.size() - 1});
@@ -2255,6 +2378,30 @@ SemanticProgram buildSemanticProgram(const ParsedPhrases& phrases) {
     SemanticProgram program{};
     program.union_members = symbols.union_members;
     for (const auto& phrase : phrases) {
+        lowerTopLevelPhrase(phrase, program, symbols);
+    }
+
+    return program;
+}
+
+// Builds the program for a single translation unit. `context_phrases` (the
+// prelude, and anything else that is compiled elsewhere) contribute symbols and
+// are validated alongside the unit, but only `unit_phrases` are lowered into
+// emittable IR — so the unit's generated C++ contains only its own definitions.
+SemanticProgram buildSemanticProgramForUnit(
+    const ParsedPhrases& context_phrases,
+    const ParsedPhrases& unit_phrases
+) {
+    ParsedPhrases combined = context_phrases;
+    combined.insert(combined.end(), unit_phrases.begin(), unit_phrases.end());
+
+    const SemanticSymbolTable symbols = collectSymbols(combined);
+    validateTypeUnionMembers(symbols);
+    validateSemantics(combined, symbols);
+
+    SemanticProgram program{};
+    program.union_members = symbols.union_members;
+    for (const auto& phrase : unit_phrases) {
         lowerTopLevelPhrase(phrase, program, symbols);
     }
 

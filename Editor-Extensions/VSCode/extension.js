@@ -2,30 +2,42 @@ const vscode = require("vscode");
 
 const KEYWORDS = [
   "type", "alias", "const", "mutable", "primitive", "struct", "enum", "union",
-  "function", "template", "return", "requires", "ensures", "result", "old",
+  "function", "template", "return", "requires", "ensures", "debug", "release",
   "if", "else", "switch", "case", "default", "for", "foreach", "do", "while",
   "loop", "limit", "continue", "break", "import", "unsafe", "null", "void",
-  "pure", "entry", "critical", "interrupt", "true", "false"
+  "pure", "entry", "critical", "interrupt", "discard", "true", "false"
 ];
 
 const PRIMITIVES = [
   "bool", "char8", "char16", "char32", "int8", "int16", "int32", "int64",
-  "uint8", "uint16", "uint32", "uint64", "float32", "float64",
-  "reference", "array", "list"
+  "uint8", "uint16", "uint32", "uint64", "float16", "float32", "float64", "float128",
+  "reference", "pointer", "array", "optional"
 ];
 
 const BUILTINS = {
-  print: "Writes a value without a trailing newline.",
-  println: "Writes a value followed by a newline.",
-  array_fill: "Fills an array with a value.",
-  widen_cast: "Performs a widening conversion.",
-  narrow_cast: "Performs a narrowing conversion.",
-  underlying_cast: "Converts an enum value to its underlying type.",
-  reinterpret_cast: "Reinterprets a value as another type.",
-  reference: "Constructs a reference to a value.",
-  static_assert: "Checks a compile-time condition and triggers a compilation error if the condition is false.",
-  assert: "Checks a runtime condition and triggers an error if the condition is false."
+  print: "Writes each argument without a trailing newline.",
+  println: "Writes each argument followed by a newline.",
+  array_fill: "array_fill<T>(count, value) — builds an array filled with `value`.",
+  widen_cast: "widen_cast<T>(value) — widening conversion to a larger type.",
+  narrow_cast: "narrow_cast<T>(value) — potentially lossy narrowing conversion; requires `unsafe`.",
+  underlying_cast: "underlying_cast<T>(value) — converts a domain type to its underlying primitive type.",
+  reinterpret_cast: "reinterpret_cast<T>(value) — bit-level reinterpretation; requires `unsafe`.",
+  reference: "reference(variable) — constructs a non-null reference to a variable.",
+  pointer: "pointer(variable) — constructs a raw pointer; only inside an `unsafe` context.",
+  sizeof: "sizeof(T) — size in bytes of a type (passed through to C++).",
+  alignof: "alignof(T) — alignment in bytes of a type (passed through to C++).",
+  static_assert: "static_assert(condition) — fails compilation when the condition is false.",
+  assert: "assert(condition) — fails at runtime when the condition is false."
 };
+
+// SCREAMING_SNAKE_CASE C++ constants the transpiler passes straight through
+// (src/lists/cpp_builtins.txt), offered as completions.
+const CONSTANTS = [
+  "UINT8_MAX", "UINT16_MAX", "UINT32_MAX", "UINT64_MAX",
+  "INT8_MIN", "INT16_MIN", "INT32_MIN", "INT64_MIN",
+  "INT8_MAX", "INT16_MAX", "INT32_MAX", "INT64_MAX",
+  "SIZE_MAX", "CHAR_BIT"
+];
 
 function identifierRange(document, position) {
   return document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/);
@@ -33,7 +45,7 @@ function identifierRange(document, position) {
 
 function documentSymbols(document) {
   const symbols = [];
-  const pattern = /^\s*(?:(type|struct|enum|union)\s+([A-Za-z_]\w*)|function\s+([A-Za-z_]\w*)|(?:const|mutable\s+)?(?:primitive\s+)?(?:[A-Za-z_]\w*(?:\[\])?)\s+([A-Za-z_]\w*))\b/gm;
+  const pattern = /^\s*(?:(type|alias|struct|enum|union)\s+([A-Za-z_]\w*)|(?:template\s*<[^>]*>\s*)?function\s+([A-Za-z_]\w*)|(?:const\s+|mutable\s+)*(?:primitive\s+)?(?:[A-Za-z_][\w:<>]*(?:\[[^\]]*\])*)\s+([A-Za-z_]\w*)\s*[=;])/gm;
   const text = document.getText();
   let match;
 
@@ -110,6 +122,7 @@ function activate(context) {
   const completionItems = [
     ...KEYWORDS.map(word => new vscode.CompletionItem(word, vscode.CompletionItemKind.Keyword)),
     ...PRIMITIVES.map(word => new vscode.CompletionItem(word, vscode.CompletionItemKind.TypeParameter)),
+    ...CONSTANTS.map(word => new vscode.CompletionItem(word, vscode.CompletionItemKind.Constant)),
     ...Object.entries(BUILTINS).map(([name, documentation]) => {
       const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Function);
       item.documentation = documentation;

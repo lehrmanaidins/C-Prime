@@ -27,13 +27,21 @@ static std::string directoryOf(const std::string& filename) {
     return path.has_parent_path() ? path.parent_path().string() : ".";
 }
 
+// Replaces a path's extension, e.g. `lib/helpers.cprime` -> `lib/helpers.cpp`.
+static std::string withExtension(const std::string& filename, const std::string& extension) {
+    std::filesystem::path path(filename);
+    path.replace_extension(extension);
+    return path.string();
+}
+
 // The generated C++ includes "c-prime.hpp" / "std.hpp" by basename. Those
 // headers are embedded in the transpiler; drop a copy next to the emitted source
 // so the generated code compiles without the C-Prime source tree present.
 static void writeRuntimeHeadersBeside(const std::string& output_filename) {
     const std::filesystem::path directory = directoryOf(output_filename);
     writeTextFile((directory / "c-prime.hpp").string(), std::string(embedded::runtime_hpp()));
-    writeTextFile((directory / "std.hpp").string(), std::string(embedded::std_hpp()));
+    writeTextFile((directory / "io.hpp").string(), std::string(embedded::io_hpp()));
+    writeTextFile((directory / "memory.hpp").string(), std::string(embedded::memory_hpp()));
 }
 
 static std::string shellQuote(const std::string& value) {

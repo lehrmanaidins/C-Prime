@@ -1,0 +1,43 @@
+# C++ builtins that C-Prime lets pass straight through to the generated C++.
+# An identifier here is accepted anywhere a value is expected; a name used in
+# call position (e.g. `sizeof(T)`) is accepted with any arguments and its
+# arguments are not checked, so type names may appear inside them.
+# One entry per line; `#` and `//` start comments.
+
+# Operators that look like calls
+sizeof
+alignof
+offsetof
+
+# <cstdint> / <climits> limits
+CHAR_BIT
+SCHAR_MIN
+SCHAR_MAX
+UCHAR_MAX
+SHRT_MIN
+SHRT_MAX
+USHRT_MAX
+INT_MIN
+INT_MAX
+UINT_MAX
+LONG_MIN
+LONG_MAX
+ULONG_MAX
+LLONG_MIN
+LLONG_MAX
+ULLONG_MAX
+INT8_MIN
+INT16_MIN
+INT32_MIN
+INT64_MIN
+INT8_MAX
+INT16_MAX
+INT32_MAX
+INT64_MAX
+UINT8_MAX
+UINT16_MAX
+UINT32_MAX
+UINT64_MAX
+SIZE_MAX
+PTRDIFF_MIN
+PTRDIFF_MAX

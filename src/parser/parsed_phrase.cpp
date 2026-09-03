@@ -25,6 +25,9 @@ enum class ParsedPhraseKind {
     IfStatement,
     WhileStatement,
     ForStatement,
+    ForeachStatement,
+    DoWhileStatement,
+    LoopStatement,
     ElseStatement,
     ImportStatement,
     UnsafeBlock,
@@ -91,6 +94,12 @@ struct ParsedPhrase : std::enable_shared_from_this<ParsedPhrase> {
                 return "WhileStatement";
             case ParsedPhraseKind::ForStatement:
                 return "ForStatement";
+            case ParsedPhraseKind::ForeachStatement:
+                return "ForeachStatement";
+            case ParsedPhraseKind::DoWhileStatement:
+                return "DoWhileStatement";
+            case ParsedPhraseKind::LoopStatement:
+                return "LoopStatement";
             case ParsedPhraseKind::ElseStatement:
                 return "ElseStatement";
             case ParsedPhraseKind::ImportStatement:

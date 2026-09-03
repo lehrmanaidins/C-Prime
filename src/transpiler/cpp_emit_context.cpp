@@ -35,6 +35,7 @@ struct CppEmitContext {
     bool current_function_has_ensures = false;
     SemanticExpressionIR current_function_ensures_clause;
     size_t current_cpp_line = 1;
+    size_t loop_serial = 0;  // names hidden `limit (...)` counters uniquely
     std::string pending_line_suffix;
 
     void pushLine(const SourceLocation& loc, const std::string& note) {

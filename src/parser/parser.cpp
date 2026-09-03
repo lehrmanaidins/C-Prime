@@ -861,13 +861,75 @@ static std::vector<std::string> splitParserTopLevel(const std::string& text, cha
     return parts;
 }
 
+// Extracts the operand of a `limit` clause: the content of `limit ( ... )`, or a
+// bare token after `limit`. Returns "" when the phrase has no `limit` clause.
+static std::string parseLimitClause(const Tokens& tokens) {
+    size_t limit_index = tokens.size();
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        if (tokens[i] && tokens[i]->value == "limit") {
+            limit_index = i;
+            break;
+        }
+    }
+    if (limit_index == tokens.size() || limit_index + 1 >= tokens.size()) {
+        return "";
+    }
+
+    if (tokens[limit_index + 1] && tokens[limit_index + 1]->value == "(") {
+        int depth = 0;
+        for (size_t i = limit_index + 1; i < tokens.size(); ++i) {
+            if (!tokens[i]) {
+                continue;
+            }
+            if (tokens[i]->value == "(") {
+                ++depth;
+            } else if (tokens[i]->value == ")") {
+                if (--depth == 0) {
+                    return trimParserText(joinTokenRange(tokens, limit_index + 2, i));
+                }
+            }
+        }
+        return "";
+    }
+
+    return tokens[limit_index + 1] ? trimParserText(tokens[limit_index + 1]->value) : "";
+}
+
 static ParsedForStatement parseForStatement(const std::shared_ptr<Phrase>& phrase) {
     const auto parts = splitParserTopLevel(parseParenthesizedContent(phrase->tokens), ';');
     const std::string initializer = parts.size() > 0 ? parts[0] : "";
     const std::string condition = parts.size() > 1 ? parts[1] : "";
     const std::string update = parts.size() > 2 ? parts[2] : "";
 
-    return ParsedForStatement(initializer, condition, update, phrase);
+    ParsedForStatement node(initializer, condition, update, phrase);
+    node.limit = parseLimitClause(phrase->tokens);
+    return node;
+}
+
+// `foreach (ElementType name in collection)` — the element declaration and the
+// collection expression are separated by a top-level ` in ` word.
+static ParsedForeachStatement parseForeachStatement(const std::shared_ptr<Phrase>& phrase) {
+    const std::string inside = parseParenthesizedContent(phrase->tokens);
+
+    std::string element_declaration = inside;
+    std::string collection;
+    const size_t in_pos = inside.find(" in ");
+    if (in_pos != std::string::npos) {
+        element_declaration = trimParserText(inside.substr(0, in_pos));
+        collection = trimParserText(inside.substr(in_pos + 4));
+    }
+
+    const size_t last_space = element_declaration.find_last_of(" \t");
+    const std::string element_type = last_space == std::string::npos
+        ? std::string{}
+        : trimParserText(element_declaration.substr(0, last_space));
+    const std::string element_name = last_space == std::string::npos
+        ? element_declaration
+        : trimParserText(element_declaration.substr(last_space + 1));
+
+    ParsedForeachStatement node(element_type, element_name, collection, phrase);
+    node.limit = parseLimitClause(phrase->tokens);
+    return node;
 }
 
 std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase, ParsedPhraseKind parent_kind = ParsedPhraseKind::Unknown) {
@@ -937,9 +999,21 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
     } else if (isKeywordPhrase(phrase, "if")) {
         parsed_phrase = std::make_shared<ParsedIfStatement>(parseParenthesizedContent(phrase->tokens), phrase);
     } else if (isKeywordPhrase(phrase, "while")) {
-        parsed_phrase = std::make_shared<ParsedWhileStatement>(parseParenthesizedContent(phrase->tokens), phrase);
+        auto while_statement = std::make_shared<ParsedWhileStatement>(parseParenthesizedContent(phrase->tokens), phrase);
+        while_statement->limit = parseLimitClause(phrase->tokens);
+        parsed_phrase = while_statement;
+    } else if (isKeywordPhrase(phrase, "foreach")) {
+        parsed_phrase = std::make_shared<ParsedForeachStatement>(parseForeachStatement(phrase));
     } else if (isKeywordPhrase(phrase, "for")) {
         parsed_phrase = std::make_shared<ParsedForStatement>(parseForStatement(phrase));
+    } else if (isKeywordPhrase(phrase, "loop")) {
+        auto loop_statement = std::make_shared<ParsedLoopStatement>(phrase);
+        loop_statement->limit = parseLimitClause(phrase->tokens);
+        parsed_phrase = loop_statement;
+    } else if (isKeywordPhrase(phrase, "do")) {
+        auto do_while_statement = std::make_shared<ParsedDoWhileStatement>(phrase);
+        do_while_statement->limit = parseLimitClause(phrase->tokens);
+        parsed_phrase = do_while_statement;
     } else if (isKeywordPhrase(phrase, "else")) {
         const bool is_else_if = phrase->tokens.size() > 1 && phrase->tokens[1] && phrase->tokens[1]->value == "if";
         parsed_phrase = std::make_shared<ParsedElseStatement>(is_else_if ? parseParenthesizedContent(phrase->tokens) : "", phrase);
@@ -1029,6 +1103,35 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
     return parsed_phrase;
 }
 
+// `do { ... } while (cond);` is preparsed as a `do` block followed by a
+// bodyless `while (cond)` sibling. This pass folds that trailing `while` into the
+// preceding `ParsedDoWhileStatement` and drops it, recursing into every body.
+static void foldDoWhileStatements(std::vector<std::shared_ptr<ParsedPhrase>>& phrases) {
+    for (size_t i = 0; i + 1 < phrases.size();) {
+        const auto& current = phrases[i];
+        const auto& next = phrases[i + 1];
+        if (current && current->kind == ParsedPhraseKind::DoWhileStatement
+            && next && next->kind == ParsedPhraseKind::WhileStatement
+            && next->nested_phrases.empty()) {
+            auto do_while_statement = std::static_pointer_cast<ParsedDoWhileStatement>(current);
+            auto while_tail = std::static_pointer_cast<ParsedWhileStatement>(next);
+            do_while_statement->condition = while_tail->condition;
+            if (!while_tail->limit.empty()) {
+                do_while_statement->limit = while_tail->limit;
+            }
+            phrases.erase(phrases.begin() + static_cast<std::ptrdiff_t>(i) + 1);
+        } else {
+            ++i;
+        }
+    }
+
+    for (const auto& phrase : phrases) {
+        if (phrase) {
+            foldDoWhileStatements(phrase->nested_phrases);
+        }
+    }
+}
+
 ParsedPhrases parsePhrases(const Phrases& phrases) {
     ParsedPhrases parsed_phrases{};
 
@@ -1036,5 +1139,6 @@ ParsedPhrases parsePhrases(const Phrases& phrases) {
         parsed_phrases.push_back(parsePhrase(phrase));
     }
 
+    foldDoWhileStatements(parsed_phrases);
     return parsed_phrases;
 }

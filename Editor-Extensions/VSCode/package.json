@@ -3,7 +3,8 @@
   "displayName": "C-Prime Language Support",
   "description": "Syntax highlighting and editor intelligence for C-Prime files",
   "publisher": "Hydranet",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "keywords": [ "cprime", "c-prime", "hprime", "transpiler" ],
   "repository": {
     "type": "git",
     "url": "https://github.com/lehrmanaidins/C-Prime"
@@ -13,9 +14,6 @@
   },
   "categories": [
     "Programming Languages"
-  ],
-  "activationEvents": [
-    "onLanguage:cprime"
   ],
   "main": "./extension.js",
   "scripts": {

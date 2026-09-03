@@ -7,16 +7,19 @@
     "primitive",
     "struct",
     "enum",
+    "union",
     "function",
+    "template",
     "return",
     "requires",
     "ensures",
-    "result",
-    "old",
+    "debug",
+    "release",
     "if",
     "else",
     "switch",
     "case",
+    "default",
     "for",
     "foreach",
     "do",
@@ -34,7 +37,8 @@
     "pure",
     "entry",
     "critical",
-    "interrupt"
+    "interrupt",
+    "discard"
   ],
   "types": [
     "uint8",
@@ -45,8 +49,10 @@
     "int16",
     "int32",
     "int64",
+    "float16",
     "float32",
     "float64",
+    "float128",
     "char8",
     "char16",
     "char32",
@@ -54,7 +60,7 @@
     "reference",
     "pointer",
     "array",
-    "list"
+    "optional"
   ],
   "commentLine": "//",
   "commentBlockStart": "/*",
@@ -77,9 +83,22 @@
   },
   "disableSingleQuoteStrings": true,
   "functions": [
+    "print",
+    "println",
+    "sizeof",
+    "alignof",
+    "array_fill",
+    "widen_cast",
+    "narrow_cast",
+    "underlying_cast",
+    "reinterpret_cast",
+    "static_assert",
+    "assert",
     "main"
   ],
   "properties": [],
-  "namespaces": [],
+  "namespaces": [
+    "cprime"
+  ],
   "blacklist": []
 }

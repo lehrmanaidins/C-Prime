@@ -16,6 +16,14 @@ struct CliOptions {
     std::string filename = "";
     std::string output_filename = "";
     std::string binary_filename = "";
+    // `--imports <dir>`: transpile each imported .cprime/.hprime file into its
+    // own .cpp under <dir> and `#include` it. Empty: inline imported code into
+    // the main output file.
+    std::string imports_dir = "";
+    // `--import-all`: emit every top-level declaration of an imported file. By
+    // default only the functions/types/values the program actually uses
+    // (transitively) are transpiled.
+    bool import_all = false;
 };
 
 static std::string usageText(const char* executable) {
@@ -29,6 +37,12 @@ static std::string usageText(const char* executable) {
            "Output:\n"
            "    --output, -o <file>     C++ output filename (default: <cprime-file>.cpp)\n"
            "    --binary, -b <file>     Binary filename (default: <cprime-file without extension>)\n"
+           "\n"
+           "Imports:\n"
+           "    --imports <dir>         Transpile imported .cprime/.hprime files into <dir>\n"
+           "                            as their own .cpp files (default: inline them)\n"
+           "    --import-all            Emit every declaration of imported files (default:\n"
+           "                            only the used functions/types/values)\n"
            "\n"
            "Other:\n"
            "    --debug                 Print compiler pipeline debug output\n"
@@ -79,6 +93,20 @@ static CliOptions parseCliOptions(int argc, char* argv[]) {
                 options.valid = false;
                 continue;
             }
+        }
+        if (arg == "--imports") {
+            if (i + 1 < argc) {
+                options.imports_dir = argv[i + 1];
+                i++;
+                continue;
+            } else {
+                options.valid = false;
+                continue;
+            }
+        }
+        if (arg == "--import-all") {
+            options.import_all = true;
+            continue;
         }
 
         if (options.filename.empty()) {

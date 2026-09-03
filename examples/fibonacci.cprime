@@ -1,0 +1,17 @@
+
+function main() {
+    mutable primitive uint64 a = 0;
+    mutable primitive uint64 b = 1;
+    mutable primitive uint64 temp = 0;
+
+    loop {
+        temp = a + b;
+        if (temp >= UINT64_MAX) {
+            break;
+        }
+
+        a = b;
+        b = temp;
+        println(temp);
+    }
+}
