@@ -2,16 +2,22 @@
 function main() {
     mutable primitive uint64 a = 0;
     mutable primitive uint64 b = 1;
-    mutable primitive uint64 temp = 0;
+    mutable primitive uint64 temp = 1;
+
+    println("0:\t", a);
+    println("1:\t", b);
+
+    mutable primitive uint16 counter = 2;
 
     loop {
         temp = a + b;
-        if (temp >= UINT64_MAX) {
+        if (temp >= UINT64_MAX) { // Overflow detected, break the loop
             break;
         }
 
         a = b;
         b = temp;
-        println(temp);
+        println(counter, ":\t", temp);
+        counter += 1;
     }
 }

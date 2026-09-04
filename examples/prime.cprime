@@ -1,0 +1,20 @@
+
+function main() {
+    primitive uint64 MAX_PRIME = UINT64_MAX;
+    mutable primitive uint64 prime_count = 1;
+
+    for (mutable primitive uint64 current = 2; current <= MAX_PRIME; current += 1) {
+        mutable primitive bool is_prime = true;
+        for (mutable primitive uint64 divisor = 2; divisor * divisor <= current; divisor += 1) {
+            if (current % divisor == 0) {
+                is_prime = false;
+                break;
+            }
+        }
+        if (is_prime) {
+            println(prime_count, " n'th prime: ", current);
+            prime_count += 1;
+        }
+    }
+    println("Prime count: ", prime_count);
+}

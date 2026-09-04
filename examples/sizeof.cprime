@@ -1,0 +1,17 @@
+
+function main() {
+    println("Size of primitive bool:    ", sizeof(primitive bool));
+    println("Size of primitive uint8:   ", sizeof(primitive uint8));
+    println("Size of primitive uint16:  ", sizeof(primitive uint16));
+    println("Size of primitive uint32:  ", sizeof(primitive uint32));
+    println("Size of primitive uint64:  ", sizeof(primitive uint64));
+    println("Size of primitive int8:    ", sizeof(primitive int8));
+    println("Size of primitive int16:   ", sizeof(primitive int16));
+    println("Size of primitive int32:   ", sizeof(primitive int32));
+    println("Size of primitive int64:   ", sizeof(primitive int64));
+    println("Size of primitive float32: ", sizeof(primitive float32));
+    println("Size of primitive float64: ", sizeof(primitive float64));
+    println("Size of primitive char8:   ", sizeof(primitive char8));
+    println("Size of primitive char16:  ", sizeof(primitive char16));
+    println("Size of primitive char32:  ", sizeof(primitive char32));
+}

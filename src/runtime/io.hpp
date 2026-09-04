@@ -4,7 +4,6 @@
 
 // C-Prime Standard Library.
 
-#include <optional>
 #include <type_traits>
 #include <iostream>
 

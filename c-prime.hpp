@@ -45,25 +45,25 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     constexpr T(Underlying&& value_arg) : value(std::forward<Underlying>(value_arg)) {} \
     [[nodiscard]] explicit constexpr operator Underlying() const { return value; } \
 
-#define CPRIME_LITERAL_MEMBER(T, Underlying) \
+#define CPRIME_LITERAL_OPERATORS(T, Underlying) \
     template <typename Literal> requires std::is_arithmetic_v<Literal> \
     constexpr T(Literal literal) : value(static_cast<Underlying>(std::move(literal))) {}
 
-#define CPRIME_EQUALITY_MEMBERS(T, Underlying) \
+#define CPRIME_EQUALITY_OPERATORS(T, Underlying) \
     [[nodiscard]] constexpr auto operator==(T other) const -> bool { return value == other.value; } \
     [[nodiscard]] constexpr auto operator!=(T other) const -> bool { return value != other.value; }
 
-#define CPRIME_ORDERED_MEMBERS(T, Underlying) \
+#define CPRIME_ORDERED_OPERATORS(T, Underlying) \
     [[nodiscard]] constexpr auto operator<(T other) const -> bool { return value < other.value; } \
     [[nodiscard]] constexpr auto operator<=(T other) const -> bool { return value <= other.value; } \
     [[nodiscard]] constexpr auto operator>(T other) const -> bool { return value > other.value; } \
     [[nodiscard]] constexpr auto operator>=(T other) const -> bool { return value >= other.value; }
 
-#define CPRIME_COMPARISON_MEMBERS(T, Underlying) \
-    CPRIME_EQUALITY_MEMBERS(T, Underlying) \
-    CPRIME_ORDERED_MEMBERS(T, Underlying)
+#define CPRIME_COMPARISON_OPERATORS(T, Underlying) \
+    CPRIME_EQUALITY_OPERATORS(T, Underlying) \
+    CPRIME_ORDERED_OPERATORS(T, Underlying)
 
-#define CPRIME_ARITHMETIC_MEMBERS(T, Underlying) \
+#define CPRIME_ARITHMETIC_OPERATORS(T, Underlying) \
     [[nodiscard]] constexpr auto operator+(T other) const -> T { return T(static_cast<Underlying>(value + other.value)); } \
     [[nodiscard]] constexpr auto operator-(T other) const -> T { return T(static_cast<Underlying>(value - other.value)); } \
     [[nodiscard]] constexpr auto operator*(T other) const -> T { return T(static_cast<Underlying>(value * other.value)); } \
@@ -73,7 +73,7 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     constexpr auto operator*=(T other) -> T& { value = static_cast<Underlying>(value * other.value); return *this; } \
     constexpr auto operator/=(T other) -> T& { value = static_cast<Underlying>(value / other.value); return *this; }
 
-#define CPRIME_MODULUS_MEMBERS(T, Underlying) \
+#define CPRIME_MODULUS_OPERATORS(T, Underlying) \
     [[nodiscard]] constexpr auto operator%(T other) const -> T { return T(static_cast<Underlying>(value % other.value)); } \
     constexpr auto operator%=(T other) -> T& { value = static_cast<Underlying>(value % other.value); return *this; }
 
@@ -103,10 +103,10 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     CPRIME_COMMON_MEMBERS(T, Underlying) \
     template <typename UnsignedIntegerLiteral> requires std::is_integral_v<UnsignedIntegerLiteral> \
     constexpr T(UnsignedIntegerLiteral literal) : value(static_cast<Underlying>(std::move(literal))) {} \
-    CPRIME_ARITHMETIC_MEMBERS(T, Underlying) \
-    CPRIME_MODULUS_MEMBERS(T, Underlying) \
+    CPRIME_ARITHMETIC_OPERATORS(T, Underlying) \
+    CPRIME_MODULUS_OPERATORS(T, Underlying) \
     CPRIME_BITWISE_MEMBERS(T, Underlying) \
-    CPRIME_COMPARISON_MEMBERS(T, Underlying) \
+    CPRIME_COMPARISON_OPERATORS(T, Underlying) \
     friend auto operator<<(std::ostream& stream, const T& self) -> std::ostream& { return stream << cprimeStreamable(self.value); } \
     __VA_ARGS__
 
@@ -114,11 +114,11 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     CPRIME_COMMON_MEMBERS(T, Underlying) \
     template <typename SignedIntegerLiteral> requires std::is_integral_v<SignedIntegerLiteral> \
     constexpr T(SignedIntegerLiteral literal) : value(static_cast<Underlying>(std::move(literal))) {} \
-    CPRIME_ARITHMETIC_MEMBERS(T, Underlying) \
-    CPRIME_MODULUS_MEMBERS(T, Underlying) \
+    CPRIME_ARITHMETIC_OPERATORS(T, Underlying) \
+    CPRIME_MODULUS_OPERATORS(T, Underlying) \
     CPRIME_SIGNED_MEMBERS(T, Underlying) \
     CPRIME_BITWISE_MEMBERS(T, Underlying) \
-    CPRIME_COMPARISON_MEMBERS(T, Underlying) \
+    CPRIME_COMPARISON_OPERATORS(T, Underlying) \
     friend auto operator<<(std::ostream& stream, const T& self) -> std::ostream& { return stream << cprimeStreamable(self.value); } \
     __VA_ARGS__
 
@@ -126,9 +126,9 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     CPRIME_COMMON_MEMBERS(T, Underlying) \
     template <typename FloatingPointLiteral> requires std::is_floating_point_v<FloatingPointLiteral> \
     constexpr T(FloatingPointLiteral literal) : value(static_cast<Underlying>(std::move(literal))) {} \
-    CPRIME_ARITHMETIC_MEMBERS(T, Underlying) \
+    CPRIME_ARITHMETIC_OPERATORS(T, Underlying) \
     CPRIME_SIGNED_MEMBERS(T, Underlying) \
-    CPRIME_COMPARISON_MEMBERS(T, Underlying) \
+    CPRIME_COMPARISON_OPERATORS(T, Underlying) \
     friend auto operator<<(std::ostream& stream, const T& self) -> std::ostream& { return stream << self.value; } \
     __VA_ARGS__
 
@@ -136,15 +136,15 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     CPRIME_COMMON_MEMBERS(T, Underlying) \
     template <typename CharacterLiteral> requires std::is_integral_v<CharacterLiteral> \
     constexpr T(CharacterLiteral literal) : value(static_cast<Underlying>(std::move(literal))) {} \
-    CPRIME_ARITHMETIC_MEMBERS(T, Underlying) \
+    CPRIME_ARITHMETIC_OPERATORS(T, Underlying) \
     CPRIME_BITWISE_MEMBERS(T, Underlying) \
-    CPRIME_COMPARISON_MEMBERS(T, Underlying) \
+    CPRIME_COMPARISON_OPERATORS(T, Underlying) \
     friend auto operator<<(std::ostream& stream, const T& self) -> std::ostream& { return stream << static_cast<char>(self.value); } \
     __VA_ARGS__
 
 #define CPRIME_BOOLEAN_MEMBERS(T, Underlying, ...) \
     CPRIME_COMMON_MEMBERS(T, Underlying) \
-    CPRIME_EQUALITY_MEMBERS(T, Underlying) \
+    CPRIME_EQUALITY_OPERATORS(T, Underlying) \
     CPRIME_BOOLEAN_MEMBERS(T, Underlying) \
     [[nodiscard]] constexpr auto operator&&(T other) const -> T { return T(value && other.value); } \
     [[nodiscard]] constexpr auto operator||(T other) const -> T { return T(value || other.value); } \

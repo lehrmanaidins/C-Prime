@@ -399,25 +399,22 @@ CPRIME_COMPOSITE_TYPE(array, (std::array<T, Size>))
 
 
 [[nodiscard]] auto main() -> int {
-    cprime::uint64 a = 0;
-    cprime::uint64 b = 1;
-    cprime::uint64 temp = 1;
+    const cprime::uint64 MAX_PRIME = UINT64_MAX;
+    cprime::uint64 prime_count = 1;
 
-    println("0:\t", a);
-    println("1:\t", b);
-
-    cprime::uint16 counter = 2;
-
-    while (true) {
-        temp = (a + b);
-        if ((temp >= UINT64_MAX)) {
-            break;
-        } // Overflow detected, break the loop
-
-        a = b;
-        b = temp;
-        println(counter, ":\t", temp);
-        counter += 1;
+    for (cprime::uint64 current = 2; (current <= MAX_PRIME); current += 1) {
+        bool is_prime = true;
+        for (cprime::uint64 divisor = 2; ((divisor * divisor) <= current); divisor += 1) {
+            if (((current % divisor) == 0)) {
+                is_prime = false;
+                break;
+            }
+        }
+        if (is_prime) {
+            println(prime_count, " n'th prime: ", current);
+            prime_count += 1;
+        }
     }
+    println("Prime count: ", prime_count);
     return EXIT_SUCCESS;
 }

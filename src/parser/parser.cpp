@@ -73,6 +73,27 @@ static bool findParentheses(const Tokens& tokens, size_t& open_index, size_t& cl
     return false;
 }
 
+// Given the index of an opening parenthesis, returns the index of the
+// parenthesis that closes it, accounting for nested parentheses. Returns
+// tokens.size() when no matching close is found.
+static size_t findMatchingParen(const Tokens& tokens, size_t open_index) {
+    int depth = 0;
+    for (size_t i = open_index; i < tokens.size(); ++i) {
+        if (!tokens[i]) {
+            continue;
+        }
+        if (tokens[i]->value == "(") {
+            ++depth;
+        } else if (tokens[i]->value == ")") {
+            --depth;
+            if (depth == 0) {
+                return i;
+            }
+        }
+    }
+    return tokens.size();
+}
+
 static std::string joinTokenRange(const Tokens& tokens, size_t begin, size_t end_exclusive) {
     if (begin >= end_exclusive || begin >= tokens.size()) {
         return "";
@@ -560,6 +581,7 @@ static bool isCallPhrase(const std::shared_ptr<Phrase>& phrase) {
     if (!findParentheses(phrase->tokens, open_paren, close_paren)) {
         return false;
     }
+    close_paren = findMatchingParen(phrase->tokens, open_paren);
 
     if (open_paren == 0 || open_paren % 2 == 0 || close_paren != phrase->tokens.size() - 1) {
         return false;
@@ -1077,15 +1099,8 @@ std::shared_ptr<ParsedPhrase> parsePhrase(const std::shared_ptr<Phrase>& phrase,
             }
         }
 
-        for (size_t i = open_paren + 1; i < phrase->tokens.size(); ++i) {
-            if (!phrase->tokens[i]) {
-                continue;
-            }
-
-            if (phrase->tokens[i]->value == ")") {
-                close_paren = i;
-                break;
-            }
+        if (open_paren < phrase->tokens.size()) {
+            close_paren = findMatchingParen(phrase->tokens, open_paren);
         }
 
         const std::string function_name = joinDottedTokenRange(phrase->tokens, 0, open_paren);

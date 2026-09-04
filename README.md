@@ -37,3 +37,20 @@
 ### Transpiler
 
 &emsp;C-Prime includes a transpiler that converts C-Prime code into C++ code for execution on standard C++ compilers. This allows developers to leverage existing C++ toolchains while benefiting from the safety and reliability features of C-Prime.
+
+---
+
+### Support
+
+&emsp;The C-Prime transpiler is currently only compiled for Linux platforms. Support for other operating systems may be added in future releases.
+
+---
+
+### Contributing
+
+&emsp;We welcome contributions to the C-Prime project. If you would like to contribute, please follow these guidelines:
+
+1. Fork the repository and create your branch from `main`.
+2. Ensure your code follows the project's coding standards and passes all tests.
+3. Submit a pull request with a clear description of your changes and the problem they solve.
+4. Engage in the code review process and address any feedback provided by the maintainers.

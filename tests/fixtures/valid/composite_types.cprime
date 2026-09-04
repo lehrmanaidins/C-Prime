@@ -1,26 +1,11 @@
-type Id : primitive uint32;
-type IdPair : (Id, Id);
-type IdList : Id[];
 
-struct Record {
-    Id id;
-    primitive bool enabled;
-};
-
-enum State {
-    STARTING,
-    RUNNING,
-    STOPPED
-};
+type UnFixedLengthArrayType : primitive uint32[];
+type FixedLengthArrayType : primitive uint32[3];
 
 function main() {
-    Id id = 7;
-    IdPair pair = (1, 2);
-    IdList[3] ids = {1, 2, 3};
-    Record record = {
-        id = 8,
-        enabled = true
-    };
-    State state = State::RUNNING;
-    println(id);
+    UnFixedLengthArrayType[3] unfixed_length_array = {1, 2, 3};
+    FixedLengthArrayType fixed_length_array = {4, 5, 6};
+
+    println(unfixed_length_array);
+    println(fixed_length_array);
 }

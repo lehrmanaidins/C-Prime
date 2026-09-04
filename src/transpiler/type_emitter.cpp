@@ -96,13 +96,23 @@ static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& cont
         base = mapPrimitiveType(resolved_type.name, context);
     }
 
+    // A domain type defined from an unsized `[]` element type is emitted as a
+    // struct templated on the element count, so a use-site length instantiates it
+    // as `Name<N>` rather than wrapping it in another array.
+    if (context.domain_array_template_types.count(resolved_type.name) != 0
+        && resolved_type.array_dimensions.size() == 1
+        && !resolved_type.array_dimensions.front().empty()) {
+        context.required_headers.insert("\"c-prime.hpp\"");
+        return base + "<" + resolved_type.array_dimensions.front() + ">";
+    }
+
     for (auto it = resolved_type.array_dimensions.rbegin(); it != resolved_type.array_dimensions.rend(); ++it) {
         if (it->empty()) {
             throw std::runtime_error("Transpile error: array type '" + resolved_type.name + "[]' requires a length at the use site");
         }
 
-        context.required_headers.insert("<array>");
-        base = "std::array<" + base + ", " + *it + ">";
+        context.required_headers.insert("\"c-prime.hpp\"");
+        base = "cprime::array<" + base + ", " + *it + ">";
     }
 
     return base;

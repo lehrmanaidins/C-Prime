@@ -69,7 +69,7 @@ enum class DomainUnderlyingKind {
 };
 
 static DomainUnderlyingKind classifyDomainUnderlying(const SemanticTypeRef& base_type, const CppEmitContext& context) {
-    if (!base_type.array_dimensions.empty() || base_type.kind == SemanticTypeKind::Tuple) {
+    if (!base_type.array_dimensions.empty()) {
         return DomainUnderlyingKind::Composite;
     }
     if (base_type.kind != SemanticTypeKind::Named) {
@@ -100,7 +100,9 @@ static DomainUnderlyingKind classifyDomainUnderlying(const SemanticTypeRef& base
             return DomainUnderlyingKind::String;
     }
 
-    if (n == "array") {
+    if (n == "array" || n == "tuple" || n == "list" || n == "set" || n == "map" ||
+        (n.find("[") != std::string::npos && n.find("]") == n.size() - 1 && n.find("[") < n.find("]"))
+    ) {
         return DomainUnderlyingKind::Composite;
     }
 
@@ -303,6 +305,33 @@ static void emitTypeDefinitionStatement(
     }
 
     const bool is_simple_type_alias = !type_def.has_requires && !type_def.has_ensures && type_def.member_functions.empty();
+
+    // An unsized `[]` array type carries no length at its definition, so it is
+    // emitted as a composite struct templated on the element count and later
+    // instantiated as `Name<N>` wherever a use site supplies the length. Only the
+    // common single unsized dimension is handled; anything more elaborate is left
+    // to fail on the length-required check in the type emitter.
+    const bool is_single_unsized_array =
+        type_def.base_type.array_dimensions.size() == 1 && type_def.base_type.array_dimensions.front().empty();
+    if (!is_generic && is_simple_type_alias && is_single_unsized_array) {
+        SemanticTypeRef element_type = type_def.base_type;
+        element_type.array_dimensions.clear();
+        const std::string element_type_str = emitTypeRef(element_type, context);
+
+        context.domain_struct_types.insert(type_def.name);
+        context.domain_array_template_types.insert(type_def.name);
+        context.domain_base_types[type_def.name] = type_def.base_type;
+        context.pushLine(type_def.location, "type");
+        context.required_headers.insert("\"c-prime.hpp\"");
+
+        appendLine(output, context, indent_str + "template <std::size_t CPrimeArrayLength>");
+        appendLine(output, context, indent_str + "struct " + type_def.name + " {");
+        appendLine(output, context, indent_str + "    CPRIME_COMPOSITE_MEMBERS(" + type_def.name
+            + ", (cprime::array<" + element_type_str + ", CPrimeArrayLength>))");
+        appendLine(output, context, indent_str + "};");
+        return;
+    }
+
     if (!is_generic && is_simple_type_alias && has_template_array_dim) {
         context.type_aliases[type_def.name] = type_def.base_type;
         context.pushLine(type_def.location, "type");

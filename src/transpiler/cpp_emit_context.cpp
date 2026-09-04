@@ -29,6 +29,10 @@ struct CppEmitContext {
     std::unordered_map<std::string, std::vector<std::string>> struct_fields;
     std::unordered_set<std::string> domain_struct_types;
     std::unordered_map<std::string, SemanticTypeRef> domain_base_types;
+    // Domain array types defined from an unsized `[]` element type; each is emitted
+    // as `template <std::size_t> struct Name { ... }` and instantiated as `Name<N>`
+    // wherever a length is supplied at the use site.
+    std::unordered_set<std::string> domain_array_template_types;
     std::unordered_map<std::string, std::vector<SemanticFunctionIR>> domain_member_functions;
     std::vector<CppSourceMapEntry> source_map;
     std::string current_return_value_name;

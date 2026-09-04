@@ -399,25 +399,19 @@ CPRIME_COMPOSITE_TYPE(array, (std::array<T, Size>))
 
 
 [[nodiscard]] auto main() -> int {
-    cprime::uint64 a = 0;
-    cprime::uint64 b = 1;
-    cprime::uint64 temp = 1;
-
-    println("0:\t", a);
-    println("1:\t", b);
-
-    cprime::uint16 counter = 2;
-
-    while (true) {
-        temp = (a + b);
-        if ((temp >= UINT64_MAX)) {
-            break;
-        } // Overflow detected, break the loop
-
-        a = b;
-        b = temp;
-        println(counter, ":\t", temp);
-        counter += 1;
-    }
+    println("Size of primitive bool:    ", sizeof(bool));
+    println("Size of primitive uint8:   ", sizeof(cprime::uint8));
+    println("Size of primitive uint16:  ", sizeof(cprime::uint16));
+    println("Size of primitive uint32:  ", sizeof(cprime::uint32));
+    println("Size of primitive uint64:  ", sizeof(cprime::uint64));
+    println("Size of primitive int8:    ", sizeof(cprime::int8));
+    println("Size of primitive int16:   ", sizeof(cprime::int16));
+    println("Size of primitive int32:   ", sizeof(cprime::int32));
+    println("Size of primitive int64:   ", sizeof(cprime::int64));
+    println("Size of primitive float32: ", sizeof(cprime::float32));
+    println("Size of primitive float64: ", sizeof(cprime::float64));
+    println("Size of primitive char8:   ", sizeof(cprime::char8));
+    println("Size of primitive char16:  ", sizeof(cprime::char16));
+    println("Size of primitive char32:  ", sizeof(cprime::char32));
     return EXIT_SUCCESS;
 }

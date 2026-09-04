@@ -1,9 +1,5 @@
 
-#include <optional>
-
 namespace cprime {
-    template <typename T>
-    using optional = std::optional<T>;
 
     // A non-owning alias to an existing object. Non-null by construction.
     // Lifetime and mutability guarantees are enforced by the C-Prime front
