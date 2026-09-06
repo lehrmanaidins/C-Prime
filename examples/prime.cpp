@@ -307,7 +307,7 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
 // A composite underlying type (`std::array<T, Size>`, ...) has a
 // top-level comma, so it is always passed parenthesised and unwrapped here with
 // CPRIME_EXPAND rather than routed through CPRIME_COMMON_MEMBERS.
-#define CPRIME_COMPOSITE_MEMBERS(T, Underlying, ...)                                                                              \
+#define CPRIME_ARRAY_MEMBERS(T, Underlying, ...)                                                                              \
   private:                                                                                                                        \
     CPRIME_EXPAND Underlying value;                                                                                               \
                                                                                                                                   \
@@ -368,7 +368,7 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
 
 #define CPRIME_COMPOSITE_TYPE(T, Underlying, ...)            \
     struct T {                                               \
-        CPRIME_COMPOSITE_MEMBERS(T, Underlying, __VA_ARGS__) \
+        CPRIME_ARRAY_MEMBERS(T, Underlying, __VA_ARGS__) \
     };
 // NOLINTEND(bugprone-macro-parentheses)
 

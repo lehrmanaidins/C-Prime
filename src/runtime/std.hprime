@@ -22,6 +22,4 @@ union Boolean : primitive bool;
 
 union Primitive : Number | Character | Boolean;
 
-type String : Character[];
-
 type Size : primitive uint64;
