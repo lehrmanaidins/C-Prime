@@ -1,0 +1,28 @@
+
+function main() {
+
+    array<primitive bool, 8> arr0 = {true, false, true, false, true, false, true, false};
+    array<primitive char8, 8> arr1 = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'};
+    array<primitive uint32, 8> arr2 = {1, 2, 3, 4, 5, 6, 7, 8};
+    array<primitive float32, 8> arr3 = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0};
+
+    println("Size: ", arr0.size(), " Length: ", arr0.length(), " Contents: ", arr0);
+    println("Size: ", arr1.size(), " Length: ", arr1.length(), " Contents: ", arr1);
+    println("Size: ", arr2.size(), " Length: ", arr2.length(), " Contents: ", arr2);
+    println("Size: ", arr3.size(), " Length: ", arr3.length(), " Contents: ", arr3);
+
+    string<16> str0 = "Hello, World!"; // Exact fit string declaration
+
+    string<32> str1 = "Hello, C-Prime!"; // Strings can be larger than their character content; extra characters are set to null ('\0')
+
+    string<8> str2 = "ABCDEFGH";
+    string<16> str3 = str2 + "IJKLMNOP"; // Concatenation of string with string literal into a larger string
+
+    string<64> str4 = str1 + " " + str3 + '!'; // Concatenation of multiple strings into a larger string
+
+    println("Size: ", str0.size(), " Length: ", str0.length(), " Contents: ", str0);
+    println("Size: ", str1.size(), " Length: ", str1.length(), " Contents: ", str1);
+    println("Size: ", str2.size(), " Length: ", str2.length(), " Contents: ", str2);
+    println("Size: ", str3.size(), " Length: ", str3.length(), " Contents: ", str3);
+    println("Size: ", str4.size(), " Length: ", str4.length(), " Contents: ", str4);
+}

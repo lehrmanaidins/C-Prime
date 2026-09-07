@@ -48,24 +48,24 @@ struct CppEmitContext {
 };
 
 static std::string mapPrimitiveType(const std::string& type_name, CppEmitContext& context) {
-    if (type_name == "bool") return "bool";
+    if (type_name == "bool") return "cprime::primitive::boolean";
     if (type_name == "void") return "void";
 
     context.required_headers.insert("\"c-prime.hpp\"");
 
-    if (type_name == "char8") return "cprime::char8";
-    if (type_name == "char16") return "cprime::char16";
-    if (type_name == "char32") return "cprime::char32";
-    if (type_name == "int8") return "cprime::int8";
-    if (type_name == "int16") return "cprime::int16";
-    if (type_name == "int32") return "cprime::int32";
-    if (type_name == "int64") return "cprime::int64";
-    if (type_name == "uint8") return "cprime::uint8";
-    if (type_name == "uint16") return "cprime::uint16";
-    if (type_name == "uint32") return "cprime::uint32";
-    if (type_name == "uint64") return "cprime::uint64";
-    if (type_name == "float32") return "cprime::float32";
-    if (type_name == "float64") return "cprime::float64";
+    if (type_name == "char8") return "cprime::primitive::char8";
+    if (type_name == "char16") return "cprime::primitive::char16";
+    if (type_name == "char32") return "cprime::primitive::char32";
+    if (type_name == "int8") return "cprime::primitive::int8";
+    if (type_name == "int16") return "cprime::primitive::int16";
+    if (type_name == "int32") return "cprime::primitive::int32";
+    if (type_name == "int64") return "cprime::primitive::int64";
+    if (type_name == "uint8") return "cprime::primitive::uint8";
+    if (type_name == "uint16") return "cprime::primitive::uint16";
+    if (type_name == "uint32") return "cprime::primitive::uint32";
+    if (type_name == "uint64") return "cprime::primitive::uint64";
+    if (type_name == "float32") return "cprime::primitive::float32";
+    if (type_name == "float64") return "cprime::primitive::float64";
 
     return type_name;
 }

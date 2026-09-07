@@ -430,12 +430,21 @@ static bool isKnownTypeRef(
 
     if (!type_ref.generic_arguments.empty()) {
         const auto generic_it = symbols.known_types.find(name);
+        // `<=` rather than `==`: some generics (e.g. `string<Size, T = char8>`)
+        // declare a trailing defaulted parameter that a use site may omit.
         if (generic_it == symbols.known_types.end()
-            || generic_it->second.template_parameter_count != type_ref.generic_arguments.size()) {
+            || type_ref.generic_arguments.size() > generic_it->second.template_parameter_count) {
             return false;
         }
         for (const auto& argument : type_ref.generic_arguments) {
-            if (!isKnownTypeRef(symbols, argument, template_type_parameters)) {
+            // A generic argument like the `8` in `array<uint8, 8>` is a
+            // compile-time size, not a type, so it never appears in known_types.
+            const bool is_integer_literal = argument.kind == SemanticTypeKind::Named
+                && !argument.name.empty()
+                && std::all_of(argument.name.begin(), argument.name.end(), [](char ch) {
+                    return std::isdigit(static_cast<unsigned char>(ch));
+                });
+            if (!is_integer_literal && !isKnownTypeRef(symbols, argument, template_type_parameters)) {
                 return false;
             }
         }
@@ -1645,6 +1654,14 @@ static SemanticSymbolTable collectSymbols(const ParsedPhrases& phrases) {
     for (const auto& primitive : primitive_types) {
         symbols.known_types.insert({primitive, TypeSymbol{TypeSymbolKind::Primitive, ""}});
     }
+
+    // `array<T, Size>` and `string<Size>`/`string<Size, T>` are built-in generic
+    // container types provided by the runtime as macro-generated structs (e.g.
+    // `CPRIME_ARRAY_TYPE(array, ...)`), so the C++ header scanner below never
+    // sees a literal `struct array`/`struct string` declaration to register
+    // them from. They are registered here by hand instead.
+    symbols.known_types.insert({"array", TypeSymbol{TypeSymbolKind::Struct, "", 2}});
+    symbols.known_types.insert({"string", TypeSymbol{TypeSymbolKind::Struct, "", 2}});
 
     symbols.known_functions.insert("pointer");
     symbols.function_parameter_counts["pointer"] = 1;

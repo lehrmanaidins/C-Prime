@@ -1,0 +1,56 @@
+
+function main() {
+    println("Size of primitive bool:              ", sizeof(primitive bool));
+    println("Size of primitive uint8:             ", sizeof(primitive uint8));
+    println("Size of primitive uint16:            ", sizeof(primitive uint16));
+    println("Size of primitive uint32:            ", sizeof(primitive uint32));
+    println("Size of primitive uint64:            ", sizeof(primitive uint64));
+    println("Size of primitive int8:              ", sizeof(primitive int8));
+    println("Size of primitive int16:             ", sizeof(primitive int16));
+    println("Size of primitive int32:             ", sizeof(primitive int32));
+    println("Size of primitive int64:             ", sizeof(primitive int64));
+    println("Size of primitive float32:           ", sizeof(primitive float32));
+    println("Size of primitive float64:           ", sizeof(primitive float64));
+    println("Size of primitive char8:             ", sizeof(primitive char8));
+    println("Size of primitive char16:            ", sizeof(primitive char16));
+    println("Size of primitive char32:            ", sizeof(primitive char32));
+    print('\n');
+    println("Size of array<primitive uint8, 8>:   ", sizeof(array<primitive uint8, 8>));
+    println("Size of array<primitive float64, 8>: ", sizeof(array<primitive float64, 8>));
+    print('\n');
+    println("Size of string<8>:                   ", sizeof(string<8>));
+    println("Size of string<primitive char8, 8>:  ", sizeof(string<primitive char8, 8>));
+    println("Size of string<primitive char16, 8>: ", sizeof(string<primitive char16, 8>));
+    println("Size of string<primitive char32, 8>: ", sizeof(string<primitive char32, 8>));
+    print('\n');
+
+    primitive bool a = true;
+    primitive uint8 b = 255;
+    primitive uint16 c = 65535;
+    primitive uint32 d = 4294967295;
+    // primitive uint64 e = 18446744073709551615; // I need to have c-prime generate int's literal with suffix
+    primitive int8 f = -128;
+    primitive int16 g = -32768;
+    primitive int32 h = -2147483648;
+    // primitive int64 i = -9223372036854775808; // I need to have c-prime generate int's literal with suffix
+    primitive float32 j = 3.14;
+    primitive float64 k = 3.141592653589793;
+    primitive char8 l = 'A';
+    primitive char16 m = 'B';
+    primitive char32 n = 'C';
+
+    println("Value of a (primitive bool):    ", a);
+    println("Value of b (primitive uint8):   ", b);
+    println("Value of c (primitive uint16):  ", c);
+    println("Value of d (primitive uint32):  ", d);
+    // println("Value of e (primitive uint64):  ", e);
+    println("Value of f (primitive int8):    ", f);
+    println("Value of g (primitive int16):   ", g);
+    println("Value of h (primitive int32):   ", h);
+    // println("Value of i (primitive int64):   ", i);
+    println("Value of j (primitive float32): ", j);
+    println("Value of k (primitive float64): ", k);
+    println("Value of l (primitive char8):   ", l);
+    println("Value of m (primitive char16):  ", m);
+    println("Value of n (primitive char32):  ", n);
+}
