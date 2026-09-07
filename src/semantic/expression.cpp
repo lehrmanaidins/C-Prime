@@ -261,6 +261,56 @@ static bool isIdentifierText(const std::string& text) {
     return true;
 }
 
+// Recognizes a generic-type reference such as `array<primitive uint8, 8>` or
+// `string<8>`: an identifier immediately followed by a `<...>` span whose
+// angle brackets balance out exactly at the end of the text. Such text is
+// a type, not a value expression, so the caller must keep it as one unit
+// rather than letting it fall into comma-splitting or `<`/`>` comparison
+// parsing, both of which are unaware of angle-bracket nesting.
+static bool isGenericTypeExpression(const std::string& text) {
+    size_t i = 0;
+    if (i >= text.size() || !(std::isalpha(static_cast<unsigned char>(text[i])) || text[i] == '_')) {
+        return false;
+    }
+    while (i < text.size() && (std::isalnum(static_cast<unsigned char>(text[i])) || text[i] == '_')) {
+        ++i;
+    }
+
+    // Call arguments reconstructed from a token stream (e.g. `sizeof(array<uint8, 8>)`)
+    // join every token with a space, producing `array < uint8 , 8 >` rather than
+    // the compact source form, so whitespace between the name and `<`, and before
+    // the closing `>`, must not disqualify this as a generic type reference.
+    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
+        ++i;
+    }
+
+    if (i >= text.size() || text[i] != '<') {
+        return false;
+    }
+
+    size_t last_non_space = text.size();
+    while (last_non_space > 0 && std::isspace(static_cast<unsigned char>(text[last_non_space - 1]))) {
+        --last_non_space;
+    }
+
+    int depth = 0;
+    for (size_t j = i; j < text.size(); ++j) {
+        if (text[j] == '<') {
+            ++depth;
+        } else if (text[j] == '>') {
+            --depth;
+            if (depth < 0) {
+                return false;
+            }
+            if (depth == 0) {
+                return j == last_non_space - 1;
+            }
+        }
+    }
+
+    return false;
+}
+
 static bool isWrappedByMatchingParens(const std::string& expression) {
     if (expression.size() < 2 || expression.front() != '(' || expression.back() != ')') {
         return false;
@@ -643,6 +693,11 @@ static SemanticExpressionIR parseExpressionIR(const std::string& raw_expression,
         return expr;
     }
 
+    if (isGenericTypeExpression(expression)) {
+        expr.kind = SemanticExpressionKind::Raw;
+        return expr;
+    }
+
     const std::vector<std::vector<std::string>> precedence_groups = {
         {"||"},
         {"&&"},
@@ -699,6 +754,12 @@ static SemanticExpressionIR parseExpressionIR(const std::string& raw_expression,
         expr.kind = SemanticExpressionKind::Call;
         expr.operator_symbol = callee;
         const std::string args = trim(expression.substr(open_paren.value() + 1, expression.size() - open_paren.value() - 2));
+        // A single generic-type argument (e.g. `sizeof(array<uint8, 8>)`) carries
+        // a top-level comma inside its `<...>` that must not be split on here.
+        if (isGenericTypeExpression(args)) {
+            expr.children.push_back(parseExpressionIR(args, location));
+            return expr;
+        }
         for (const auto& part : splitTopLevel(args, ',')) {
             if (!part.empty()) {
                 expr.children.push_back(parseExpressionIR(part, location));

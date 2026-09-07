@@ -9,11 +9,13 @@ Checks: >
   misc-*,
   -misc-use-internal-linkage,
   modernize-*,
+  -modernize-use-std-numbers,
   performance-*,
   portability-*,
   readability-*,
   -readability-identifier-length,
-  -readability-magic-numbers
+  -readability-magic-numbers,
+  -Wimplicitly-unsigned-literal
 WarningsAsErrors: '*'
 # Only analyse the generated translation unit, not the runtime headers.
 HeaderFilterRegex: '$^'

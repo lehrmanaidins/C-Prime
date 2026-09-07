@@ -84,10 +84,23 @@ static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& cont
     } else if (resolved_type.kind == SemanticTypeKind::Function) {
         base = "auto";
     } else if (!resolved_type.generic_arguments.empty()) {
-        base = resolved_type.name + "<";
-        for (size_t i = 0; i < resolved_type.generic_arguments.size(); ++i) {
+        std::string qualified_name = resolved_type.name;
+        std::vector<SemanticTypeRef> generic_arguments = resolved_type.generic_arguments;
+        if (resolved_type.name == "array" || resolved_type.name == "string") {
+            context.required_headers.insert("\"c-prime.hpp\"");
+            qualified_name = "cprime::" + resolved_type.name;
+        }
+        // C-Prime source writes `string<Size>` or `string<T, Size>` (element type
+        // first, matching how it reads), but the runtime declares
+        // `cprime::string<Size, T = char8>` so a bare `string<Size>` can default
+        // the element type. Reorder the two-argument form to match.
+        if (resolved_type.name == "string" && generic_arguments.size() == 2) {
+            std::swap(generic_arguments[0], generic_arguments[1]);
+        }
+        base = qualified_name + "<";
+        for (size_t i = 0; i < generic_arguments.size(); ++i) {
             if (i > 0) base += ", ";
-            base += emitTypeRef(resolved_type.generic_arguments[i], context);
+            base += emitTypeRef(generic_arguments[i], context);
         }
         base += ">";
     } else if (context.union_members.find(normalizeTypeName(resolved_type.name)) != context.union_members.end()) {

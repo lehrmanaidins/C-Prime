@@ -66,13 +66,15 @@ static std::string emitExpression(const SemanticExpressionIR& expression, CppEmi
         }
         case SemanticExpressionKind::Raw:
         default: {
-            // A `primitive T` type expression (e.g. the argument of `sizeof`) is
-            // written with the `primitive` keyword, which `parseTypeRef` records.
-            // Emit it through the type emitter so the C-Prime type name maps to
-            // its C++ counterpart. A bare value expression (a variable passed to
-            // `sizeof`, say) has no such marker and is emitted verbatim.
-            if (parseTypeRef(expression.text).is_primitive) {
-                return emitTypeRef(parseTypeRef(expression.text), context);
+            // A `primitive T` type expression, or a generic type reference like
+            // `array<primitive uint8, 8>` (e.g. the argument of `sizeof`), is
+            // recorded as such by `parseTypeRef`. Emit it through the type
+            // emitter so the C-Prime type name maps to its C++ counterpart. A
+            // bare value expression (a variable passed to `sizeof`, say) has
+            // neither marker and is emitted verbatim.
+            const SemanticTypeRef parsed_type = parseTypeRef(expression.text);
+            if (parsed_type.is_primitive || !parsed_type.generic_arguments.empty()) {
+                return emitTypeRef(parsed_type, context);
             }
             return expression.text;
         }

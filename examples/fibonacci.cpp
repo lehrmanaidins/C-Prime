@@ -55,7 +55,7 @@ void println(const Args&... args) {
 // through its own `operator<<`. Being a template, the untaken `if constexpr`
 // branch is discarded, so this stays well-formed for every underlying type.
 template <typename CPrimeStreamValue>
-constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
+[[nodiscard]] constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     if constexpr (std::is_same_v<CPrimeStreamValue, unsigned char> || std::is_same_v<CPrimeStreamValue, signed char> || std::is_same_v<CPrimeStreamValue, char>) {
         return static_cast<int>(value);
     } else {
@@ -68,15 +68,15 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
 // parentheses that would be ill-formed. Callers always pass a single type name or a
 // parenthesised composite unwrapped via CPRIME_EXPAND, so the check is suppressed here.
 // NOLINTBEGIN(bugprone-macro-parentheses)
-#define CPRIME_COMMON_CONSTRUCTORS(T, Underlying)                                       \
-  private:                                                                              \
-    Underlying value;                                                                   \
-                                                                                        \
-  public:                                                                               \
-    T(const Underlying& value_arg) = delete;                                            \
-    constexpr T(Underlying&& value_arg) : value(std::forward<Underlying>(value_arg)) {} \
-    [[nodiscard]] explicit constexpr operator Underlying() const {                      \
-        return value;                                                                   \
+#define CPRIME_COMMON_CONSTRUCTORS(T, Underlying)                                                     \
+  private:                                                                                            \
+    Underlying value;                                                                                 \
+                                                                                                      \
+  public:                                                                                             \
+    [[nodiscard]] T(const Underlying& value_arg) = delete;                                            \
+    [[nodiscard]] constexpr T(Underlying&& value_arg) : value(std::forward<Underlying>(value_arg)) {} \
+    [[nodiscard]] explicit constexpr operator Underlying() const {                                    \
+        return value;                                                                                 \
     }
 
 #define CPRIME_EQUALITY_OPERATORS(T)                               \
@@ -100,10 +100,6 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     [[nodiscard]] constexpr auto operator>=(T other) const->bool { \
         return value >= other.value;                               \
     }
-
-#define CPRIME_COMPARISON_OPERATORS(T) \
-    CPRIME_EQUALITY_OPERATORS(T)       \
-    CPRIME_ORDERED_OPERATORS(T)
 
 #define CPRIME_ARITHMETIC_INTEGER_OPERATORS(T, Underlying)                   \
     [[nodiscard]] constexpr auto operator+(T other) const->T {               \
@@ -250,7 +246,8 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     constexpr T(UnsignedIntegerLiteral literal) : value(static_cast<Underlying>(std::move(literal))) {} \
     CPRIME_ARITHMETIC_INTEGER_OPERATORS(T, Underlying)                                                  \
     CPRIME_BITWISE_OPERATORS(T, Underlying)                                                             \
-    CPRIME_COMPARISON_OPERATORS(T)                                                                      \
+    CPRIME_EQUALITY_OPERATORS(T)                                                                        \
+    CPRIME_ORDERED_OPERATORS(T)                                                                         \
     friend auto operator<<(std::ostream& stream, const T& self)->std::ostream& {                        \
         return stream << cprimeStreamable(self.value);                                                  \
     }                                                                                                   \
@@ -264,7 +261,8 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     CPRIME_ARITHMETIC_INTEGER_OPERATORS(T, Underlying)                                                \
     CPRIME_ARITHMETIC_SIGNED_OPERATORS(T, Underlying)                                                 \
     CPRIME_BITWISE_OPERATORS(T, Underlying)                                                           \
-    CPRIME_COMPARISON_OPERATORS(T)                                                                    \
+    CPRIME_EQUALITY_OPERATORS(T)                                                                      \
+    CPRIME_ORDERED_OPERATORS(T)                                                                       \
     friend auto operator<<(std::ostream& stream, const T& self)->std::ostream& {                      \
         return stream << cprimeStreamable(self.value);                                                \
     }                                                                                                 \
@@ -277,7 +275,8 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     constexpr T(FloatingPointLiteral literal) : value(static_cast<Underlying>(std::move(literal))) {} \
     CPRIME_ARITHMETIC_FLOATING_POINT_OPERATORS(T, Underlying)                                         \
     CPRIME_ARITHMETIC_SIGNED_OPERATORS(T, Underlying)                                                 \
-    CPRIME_COMPARISON_OPERATORS(T)                                                                    \
+    CPRIME_EQUALITY_OPERATORS(T)                                                                      \
+    CPRIME_ORDERED_OPERATORS(T)                                                                       \
     friend auto operator<<(std::ostream& stream, const T& self)->std::ostream& {                      \
         return stream << self.value;                                                                  \
     }                                                                                                 \
@@ -289,7 +288,8 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
         requires std::is_integral_v<CharacterLiteral>                                             \
     constexpr T(CharacterLiteral literal) : value(static_cast<Underlying>(std::move(literal))) {} \
     CPRIME_BITWISE_OPERATORS(T, Underlying)                                                       \
-    CPRIME_COMPARISON_OPERATORS(T)                                                                \
+    CPRIME_EQUALITY_OPERATORS(T)                                                                  \
+    CPRIME_ORDERED_OPERATORS(T)                                                                   \
     friend auto operator<<(std::ostream& stream, const T& self)->std::ostream& {                  \
         return stream << static_cast<char>(self.value);                                           \
     }                                                                                             \
@@ -304,42 +304,80 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
     }                                                                            \
     __VA_ARGS__
 
-// A composite underlying type (`std::array<T, Size>`, ...) has a
-// top-level comma, so it is always passed parenthesised and unwrapped here with
-// CPRIME_EXPAND rather than routed through CPRIME_COMMON_MEMBERS.
-#define CPRIME_ARRAY_MEMBERS(T, Underlying, ...)                                                                              \
-  private:                                                                                                                        \
-    CPRIME_EXPAND Underlying value;                                                                                               \
-                                                                                                                                  \
-  public:                                                                                                                         \
-    T(const CPRIME_EXPAND Underlying& value_arg) = delete;                                                                        \
-    constexpr T(CPRIME_EXPAND Underlying&& value_arg) : value(std::move(value_arg)) {}                                            \
-    template <std::size_t... CPrimeArrayIndices>                                                                                  \
-    constexpr T(std::initializer_list<typename decltype(value)::value_type> elements, std::index_sequence<CPrimeArrayIndices...>) \
-        : value{*(elements.begin() + CPrimeArrayIndices)...} {}                                                                   \
-    constexpr T(std::initializer_list<typename decltype(value)::value_type> elements)                                             \
-        : T(elements, std::make_index_sequence<std::tuple_size_v<std::remove_cv_t<decltype(value)>>>()) {}                        \
-    [[nodiscard]] explicit constexpr operator CPRIME_EXPAND Underlying() const {                                                  \
-        return value;                                                                                                             \
-    }                                                                                                                             \
-    [[nodiscard]] constexpr auto operator[](std::size_t index)->decltype(auto) {                                                  \
-        return value[index];                                                                                                      \
-    }                                                                                                                             \
-    [[nodiscard]] constexpr auto operator[](std::size_t index) const->decltype(auto) {                                            \
-        return value[index];                                                                                                      \
-    }                                                                                                                             \
-    CPRIME_EQUALITY_OPERATORS(T)                                                                                                  \
-    friend auto operator<<(std::ostream& stream, const T& self)->std::ostream& {                                                  \
-        stream << '[';                                                                                                            \
-        for (std::size_t i = 0; i < self.value.size(); ++i) {                                                                     \
-            if (i != 0) {                                                                                                         \
-                stream << ", ";                                                                                                   \
-            }                                                                                                                     \
-            stream << self.value[i];                                                                                              \
-        }                                                                                                                         \
-        return stream << ']';                                                                                                     \
-    }                                                                                                                             \
+#define CPRIME_ARRAY_MEMBERS(T, Underlying, ...)                                                                                                \
+  private:                                                                                                                                      \
+    CPRIME_EXPAND Underlying value;                                                                                                             \
+                                                                                                                                                \
+  public:                                                                                                                                       \
+    [[nodiscard]] T(const CPRIME_EXPAND Underlying& value_arg) = delete;                                                                        \
+    constexpr T(CPRIME_EXPAND Underlying&& value_arg) : value(std::move(value_arg)) {}                                                          \
+    template <std::size_t... CPrimeArrayIndices>                                                                                                \
+    [[nodiscard]] constexpr T(std::initializer_list<typename decltype(value)::value_type> elements, std::index_sequence<CPrimeArrayIndices...>) \
+        : value{*(elements.begin() + CPrimeArrayIndices)...} {}                                                                                 \
+    [[nodiscard]] constexpr T(std::initializer_list<typename decltype(value)::value_type> elements)                                             \
+        : T(elements, std::make_index_sequence<std::tuple_size_v<std::remove_cv_t<decltype(value)>>>()) {}                                      \
+    [[nodiscard]] constexpr auto length() -> std::size_t {                                                                                      \
+        return value.size();                                                                                                                    \
+    }                                                                                                                                           \
+    [[nodiscard]] constexpr auto operator[](std::size_t index)->decltype(auto) {                                                                \
+        return value[index];                                                                                                                    \
+    }                                                                                                                                           \
+    [[nodiscard]] constexpr auto operator[](std::size_t index) const->decltype(auto) {                                                          \
+        return value[index];                                                                                                                    \
+    }                                                                                                                                           \
+    [[nodiscard]] constexpr auto operator+(T other) const->T {                                                                                  \
+        return T(value + other.value);                                                                                                          \
+    }                                                                                                                                           \
+    CPRIME_EQUALITY_OPERATORS(T)                                                                                                                \
+    CPRIME_ORDERED_OPERATORS(T)                                                                                                                 \
+    friend auto operator<<(std::ostream& stream, const T& self)->std::ostream& {                                                                \
+        stream << '{';                                                                                                                          \
+        for (std::size_t i = 0; i < self.value.size(); ++i) {                                                                                   \
+            if (i != 0) {                                                                                                                       \
+                stream << ", ";                                                                                                                 \
+            }                                                                                                                                   \
+            stream << self.value[i];                                                                                                            \
+        }                                                                                                                                       \
+        return stream << '}';                                                                                                                   \
+    }                                                                                                                                           \
     __VA_ARGS__
+
+// NOLINTBEGIN(modernize-avoid-c-arrays)
+#define CPRIME_STRING_MEMBERS(T, Underlying, ...)                                                                                                   \
+  private:                                                                                                                                          \
+    CPRIME_EXPAND Underlying value;                                                                                                                 \
+    template <std::size_t N, std::size_t... CPrimeStringIndices>                                                                                    \
+    static constexpr auto cprimeStringFromLiteral(const char (&cstr)[N], std::index_sequence<CPrimeStringIndices...>) -> CPRIME_EXPAND Underlying { \
+        return CPRIME_EXPAND Underlying{cprime::primitive::char8(cstr[CPrimeStringIndices])...};                                                    \
+    }                                                                                                                                               \
+                                                                                                                                                    \
+  public:                                                                                                                                           \
+    [[nodiscard]] T(const CPRIME_EXPAND Underlying& value_arg) = delete;                                                                            \
+    [[nodiscard]] constexpr T(CPRIME_EXPAND Underlying&& value_arg) : value(std::move(value_arg)) {}                                                \
+    template <std::size_t N>                                                                                                                        \
+    [[nodiscard]] constexpr T(const char (&cstr)[N]) : value(cprimeStringFromLiteral(cstr, std::make_index_sequence<N - 1>())) {                    \
+        static_assert(N - 1 == value.length(), "string literal length does not match the declared string length");                                  \
+    }                                                                                                                                               \
+    [[nodiscard]] T(const char* cstr) = delete;                                                                                                     \
+    CPRIME_EQUALITY_OPERATORS(T)                                                                                                                    \
+    CPRIME_ORDERED_OPERATORS(T)                                                                                                                     \
+    [[nodiscard]] constexpr auto operator[](std::size_t index)->decltype(auto) {                                                                    \
+        return value[index];                                                                                                                        \
+    }                                                                                                                                               \
+    [[nodiscard]] constexpr auto operator[](std::size_t index) const->decltype(auto) {                                                              \
+        return value[index];                                                                                                                        \
+    }                                                                                                                                               \
+    [[nodiscard]] constexpr auto length() -> std::size_t {                                                                                          \
+        return value.length();                                                                                                                      \
+    }                                                                                                                                               \
+    friend auto operator<<(std::ostream& stream, const T& self)->std::ostream& {                                                                    \
+        for (std::size_t i = 0; i < self.value.length(); i += 1) {                                                                                  \
+            stream << self.value[i];                                                                                                                \
+        }                                                                                                                                           \
+        return stream;                                                                                                                              \
+    }                                                                                                                                               \
+    __VA_ARGS__
+// NOLINTEND(modernize-avoid-c-arrays)
 
 #define CPRIME_UNSIGNED_INTEGER_TYPE(T, Underlying, ...)            \
     struct T {                                                      \
@@ -366,13 +404,19 @@ constexpr auto cprimeStreamable(const CPrimeStreamValue& value) {
         CPRIME_BOOLEAN_MEMBERS(T, Underlying, __VA_ARGS__) \
     };
 
-#define CPRIME_COMPOSITE_TYPE(T, Underlying, ...)            \
-    struct T {                                               \
+#define CPRIME_ARRAY_TYPE(T, Underlying, ...)            \
+    struct T {                                           \
         CPRIME_ARRAY_MEMBERS(T, Underlying, __VA_ARGS__) \
+    };
+
+#define CPRIME_STRING_TYPE(T, Underlying, ...)            \
+    struct T {                                            \
+        CPRIME_STRING_MEMBERS(T, Underlying, __VA_ARGS__) \
     };
 // NOLINTEND(bugprone-macro-parentheses)
 
 namespace cprime {
+namespace primitive {
 CPRIME_UNSIGNED_INTEGER_TYPE(uint8, std::uint8_t)
 CPRIME_UNSIGNED_INTEGER_TYPE(uint16, std::uint16_t)
 CPRIME_UNSIGNED_INTEGER_TYPE(uint32, std::uint32_t)
@@ -390,8 +434,14 @@ CPRIME_CHARACTER_TYPE(char8, std::uint8_t)
 CPRIME_CHARACTER_TYPE(char16, std::uint16_t)
 CPRIME_CHARACTER_TYPE(char32, std::uint32_t)
 
+} // namespace primitive
+
 template <typename T, std::size_t Size>
-CPRIME_COMPOSITE_TYPE(array, (std::array<T, Size>))
+CPRIME_ARRAY_TYPE(array, (std::array<T, Size>))
+
+template <typename T = cprime::primitive::char8, std::size_t Size = 0>
+CPRIME_STRING_TYPE(string, (cprime::array<T, Size>))
+
 } // namespace cprime
 
 #endif // CPRIME_RUNTIME_HPP
@@ -399,14 +449,14 @@ CPRIME_COMPOSITE_TYPE(array, (std::array<T, Size>))
 
 
 [[nodiscard]] auto main() -> int {
-    cprime::uint64 a = 0;
-    cprime::uint64 b = 1;
-    cprime::uint64 temp = 1;
+    cprime::primitive::uint64 a = 0;
+    cprime::primitive::uint64 b = 1;
+    cprime::primitive::uint64 temp = 1;
 
     println("0:\t", a);
     println("1:\t", b);
 
-    cprime::uint16 counter = 2;
+    cprime::primitive::uint16 counter = 2;
 
     while (true) {
         temp = (a + b);
