@@ -16,9 +16,9 @@ enum class TokenType {
     Whitespace,
 };
 
-template <enum TokenType>
+template <TokenType T>
 struct Token {
-    TokenType type;
+    static constexpr TokenType token_type = T;
     std::string lexeme;
     std::size_t line;
     std::size_t column;

@@ -7,7 +7,7 @@
 #include <regex>
 #include <iostream>
 
-#include "lexeme.cpp"
+#include "lexeme.hpp"
 
 namespace lexemizer {
     
@@ -15,10 +15,10 @@ namespace lexemizer {
         R"([A-Za-z_][A-Za-z0-9_]*)";
 
     inline constexpr std::string_view INTEGER_LITERAL_REGEX_PATTERN =
-        R"([0-9]+)";
+        R"([0-9](?:_?[0-9])*(?:[eE][+]?[0-9](?:_?[0-9])*)?)";
 
     inline constexpr std::string_view FLOAT_LITERAL_REGEX_PATTERN =
-        R"([0-9]+\.[0-9]+)";
+        R"([0-9](?:_?[0-9])*\.[0-9](?:_?[0-9])*(?:[eE][+-]?[0-9](?:_?[0-9])*)?)";
 
     inline constexpr std::string_view STRING_LITERAL_REGEX_PATTERN =
         R"("(?:[^"\\]|\\.)*")";

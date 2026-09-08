@@ -2,8 +2,8 @@
 #include <iostream>
 #include <iomanip>
 
-#include "io.cpp"
-#include "lexer/lexemizer.cpp"
+#include "io.hpp"
+#include "lexer/lexeme/lexemizer.hpp"
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {

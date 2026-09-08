@@ -9,13 +9,18 @@
 #include <optional>
 #include <unordered_map>
 
-#include "../../io.cpp"
-#include "lexeme.cpp"
-#include "lexeme_pattern.cpp"
+#include "../../io.hpp"
+#include "lexeme.hpp"
+#include "lexeme_pattern.hpp"
 
 namespace lexemizer {
 
     std::vector<Lexeme> lexemize(const std::vector<std::string>& source) {
+        if (source.empty()) {
+            std::cerr << "lexemize(): `source` is empty." << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+
         std::vector<Lexeme> lexemes;
 
         for (std::size_t line = 0; line < source.size(); ++line) {
