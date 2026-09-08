@@ -3,7 +3,7 @@
 #include <iomanip>
 
 #include "io.cpp"
-#include "lexemizer.cpp"
+#include "lexer/lexemizer.cpp"
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
