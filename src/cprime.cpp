@@ -2,8 +2,7 @@
 #include <iostream>
 #include <iomanip>
 
-#include "io.hpp"
-#include "lexer/lexeme/lexemizer.hpp"
+#include "lexer/lexer.hpp"
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -13,14 +12,10 @@ int main(int argc, char* argv[]) {
 
     const std::string filename = argv[1];
 
-    std::vector<lexemizer::Lexeme> lexemes = lexemizer::lexemize(io::readFileLines(filename));
-
-    for (const lexemizer::Lexeme& lexeme : lexemes) {
-        std::cout << std::right << std::setw(24) << lexeme.type
-                  << " (Line: " << lexeme.line
-                  << ", Column: " << lexeme.column
-                  << ")\t| " << lexeme.text
-                  << std::endl;
+    std::vector<TokenVariant> tokens = lexFile(filename);
+    
+    for (const TokenVariant& token : tokens) {
+        std::cout << toString(token) << std::endl;
     }
 
     return EXIT_SUCCESS;
