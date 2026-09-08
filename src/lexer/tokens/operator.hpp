@@ -78,7 +78,7 @@ struct OperatorToken : Token<TokenType::Operator> {
             return it->second;
         }
         
-        throwLexerError("Invalid operator lexeme: " + lexeme, lexeme, line, column);
+        throwLexerError("Unknown Operator: " + lexeme, lexeme, line, column);
     }
 
     static bool isOperator(const std::string& lexeme) {

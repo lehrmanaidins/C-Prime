@@ -102,7 +102,7 @@ struct KeywordToken : Token<TokenType::Keyword> {
             return it->second;
         }
         
-        throwLexerError("Unknown keyword: " + lexeme, lexeme, line, column);
+        throwLexerError("Unknown Keyword: " + lexeme, lexeme, line, column);
     }
 
     static bool isKeyword(const std::string& lexeme) {
