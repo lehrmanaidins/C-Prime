@@ -177,14 +177,14 @@ static void emitTopLevelFunction(
     std::string signature = nodiscardPrefix(return_type, function.is_discardable) + "auto " + function.name + "(";
     for (size_t i = 0; i < function.parameters.size(); ++i) {
         if (i > 0) signature += ", ";
-        signature += emitTypeRef(function.parameters[i].type, context) + " " + function.parameters[i].name;
+        signature += "[[maybe_unused]] " + emitTypeRef(function.parameters[i].type, context) + " " + function.parameters[i].name;
     }
     signature += ") -> " + return_type;
 
     appendLine(body, context, signature + " {");
     if (function.has_requires) {
         context.required_headers.insert("<stdexcept>");
-        appendLine(body, context, "    if constexpr (!(" + emitExpression(function.requires_clause, context) + ")) { throw std::runtime_error(\"function requires clause violated\"); }");
+        appendLine(body, context, "    if (!(" + emitExpression(function.requires_clause, context) + ")) { throw std::runtime_error(\"function requires clause violated\"); }");
     }
 
     const std::string previous_return_value_name = context.current_return_value_name;

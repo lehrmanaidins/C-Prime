@@ -2,6 +2,7 @@
 #ifndef CPRIME_RUNTIME_HPP
 #define CPRIME_RUNTIME_HPP
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -12,6 +13,7 @@
 #include <numeric>
 // #include <stdexcept>
 // #include <string>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <cstring>
@@ -42,6 +44,26 @@ template <typename CPrimeStreamValue>
     }
 }
 
+// std::*_sat only accepts standard integer types; a domain type's `Underlying`
+// can instead be another C-Prime wrapper (e.g. a `type` built over `uint32`),
+// which already saturates through its own operators, so just forward to those.
+template <typename CPrimeSatValue>
+[[nodiscard]] constexpr auto cprimeAddSat(CPrimeSatValue lhs, CPrimeSatValue rhs) -> CPrimeSatValue {
+    if constexpr (std::is_integral_v<CPrimeSatValue>) { return std::add_sat(lhs, rhs); } else { return lhs + rhs; }
+}
+template <typename CPrimeSatValue>
+[[nodiscard]] constexpr auto cprimeSubSat(CPrimeSatValue lhs, CPrimeSatValue rhs) -> CPrimeSatValue {
+    if constexpr (std::is_integral_v<CPrimeSatValue>) { return std::sub_sat(lhs, rhs); } else { return lhs - rhs; }
+}
+template <typename CPrimeSatValue>
+[[nodiscard]] constexpr auto cprimeMulSat(CPrimeSatValue lhs, CPrimeSatValue rhs) -> CPrimeSatValue {
+    if constexpr (std::is_integral_v<CPrimeSatValue>) { return std::mul_sat(lhs, rhs); } else { return lhs * rhs; }
+}
+template <typename CPrimeSatValue>
+[[nodiscard]] constexpr auto cprimeDivSat(CPrimeSatValue lhs, CPrimeSatValue rhs) -> CPrimeSatValue {
+    if constexpr (std::is_integral_v<CPrimeSatValue>) { return std::div_sat(lhs, rhs); } else { return lhs / rhs; }
+}
+
 // The wrapper-member macros splice `Underlying` into type positions (`Underlying&&`,
 // `static_cast<Underlying>`), where clang-tidy's bugprone-macro-parentheses wants
 // parentheses that would be ill-formed. Callers always pass a single type name or a
@@ -54,7 +76,7 @@ template <typename CPrimeStreamValue>
     [[nodiscard]] explicit T() = delete; \
     [[nodiscard]] explicit T(const Underlying& value_arg) = delete; \
     [[nodiscard]] constexpr T(Underlying&& value_arg) : value(std::forward<Underlying>(value_arg)) {} \
-    [[nodiscard]] constexpr auto operator=(Underlying&& value_arg) -> T& { value = std::forward<Underlying>(value_arg); return *this; } \
+    constexpr auto operator=(Underlying&& value_arg) -> T& { value = std::forward<Underlying>(value_arg); return *this; } \
     [[nodiscard]] explicit constexpr operator Underlying() const { return value; } \
 
 #define CPRIME_EQUALITY_OPERATORS(T) \
@@ -68,15 +90,15 @@ template <typename CPrimeStreamValue>
     [[nodiscard]] constexpr auto operator>=(T other) const -> bool { return value >= other.value; }
 
 #define CPRIME_ARITHMETIC_INTEGER_OPERATORS(T, Underlying) \
-    [[nodiscard]] constexpr auto operator+(T other) const -> T { return T(static_cast<Underlying>(std::add_sat(value, other.value))); } \
-    [[nodiscard]] constexpr auto operator-(T other) const -> T { return T(static_cast<Underlying>(std::sub_sat(value, other.value))); } \
-    [[nodiscard]] constexpr auto operator*(T other) const -> T { return T(static_cast<Underlying>(std::mul_sat(value, other.value))); } \
-    [[nodiscard]] constexpr auto operator/(T other) const -> T { return T(static_cast<Underlying>(std::div_sat(value, other.value))); } \
+    [[nodiscard]] constexpr auto operator+(T other) const -> T { return T(static_cast<Underlying>(cprimeAddSat(value, other.value))); } \
+    [[nodiscard]] constexpr auto operator-(T other) const -> T { return T(static_cast<Underlying>(cprimeSubSat(value, other.value))); } \
+    [[nodiscard]] constexpr auto operator*(T other) const -> T { return T(static_cast<Underlying>(cprimeMulSat(value, other.value))); } \
+    [[nodiscard]] constexpr auto operator/(T other) const -> T { return T(static_cast<Underlying>(cprimeDivSat(value, other.value))); } \
     [[nodiscard]] constexpr auto operator%(T other) const -> T { return T(static_cast<Underlying>(value % other.value)); } \
-    constexpr auto operator+=(T other) -> T& { value = static_cast<Underlying>(std::add_sat(value, other.value)); return *this; } \
-    constexpr auto operator-=(T other) -> T& { value = static_cast<Underlying>(std::sub_sat(value, other.value)); return *this; } \
-    constexpr auto operator*=(T other) -> T& { value = static_cast<Underlying>(std::mul_sat(value, other.value)); return *this; } \
-    constexpr auto operator/=(T other) -> T& { value = static_cast<Underlying>(std::div_sat(value, other.value)); return *this; } \
+    constexpr auto operator+=(T other) -> T& { value = static_cast<Underlying>(cprimeAddSat(value, other.value)); return *this; } \
+    constexpr auto operator-=(T other) -> T& { value = static_cast<Underlying>(cprimeSubSat(value, other.value)); return *this; } \
+    constexpr auto operator*=(T other) -> T& { value = static_cast<Underlying>(cprimeMulSat(value, other.value)); return *this; } \
+    constexpr auto operator/=(T other) -> T& { value = static_cast<Underlying>(cprimeDivSat(value, other.value)); return *this; } \
     constexpr auto operator%=(T other) -> T& { value = static_cast<Underlying>(value % other.value); return *this; } \
 
 #define CPRIME_ARITHMETIC_SIGNED_OPERATORS(T, Underlying) \
@@ -172,9 +194,13 @@ template <typename CPrimeStreamValue>
 #define CPRIME_ARRAY_MEMBERS(ArrayType, Underlying, ...) \
     private: \
     CPRIME_EXPAND Underlying value; \
-    template <typename, std::size_t> friend struct cprime::array; \
+    template <typename, std::size_t> friend struct std::array; \
+    \
     public: \
     using UnderlyingType = typename CPRIME_EXPAND Underlying::value_type; \
+    /* Derived from `value`'s own type rather than an external template parameter, so this \
+       also works for non-templated (fixed-length) array domain types. */ \
+    static constexpr std::size_t CPrimeArraySize = std::tuple_size_v<std::remove_cv_t<decltype(value)>>; \
     [[nodiscard]] explicit constexpr ArrayType() = delete; \
     [[nodiscard]] explicit ArrayType(const CPRIME_EXPAND Underlying& value_arg) = delete; \
     [[nodiscard]] explicit constexpr ArrayType(CPRIME_EXPAND Underlying&& value_arg) : value(std::move(value_arg)) {} \
@@ -186,9 +212,9 @@ template <typename CPrimeStreamValue>
     [[nodiscard]] constexpr ArrayType(std::initializer_list<typename decltype(value)::value_type> elements) \
         : ArrayType(elements, std::make_index_sequence<std::tuple_size_v<std::remove_cv_t<decltype(value)>>>()) {} \
     [[nodiscard]] constexpr auto length() const -> std::size_t { return value.size(); } \
-    [[nodiscard]] consteval auto size() const -> std::size_t { return Size; } \
+    [[nodiscard]] consteval auto size() const -> std::size_t { return CPrimeArraySize; } \
     [[nodiscard]] constexpr auto find(const UnderlyingType& chr) const -> std::size_t { \
-        return static_cast<std::size_t>(std::distance(value.begin(), std::find(value.begin(), value.end(), chr))); \
+        return static_cast<std::size_t>(std::ranges::find(value, chr) - value.begin()); \
     } \
     [[nodiscard]] constexpr auto operator[](std::size_t index) -> decltype(auto) { return value[index]; } \
     [[nodiscard]] constexpr auto operator[](std::size_t index) const -> decltype(auto) { return value[index]; } \
@@ -201,10 +227,10 @@ template <typename CPrimeStreamValue>
     } \
     template <std::size_t OtherSize> \
     [[nodiscard]] constexpr auto operator+(const cprime::array<UnderlyingType, OtherSize>& other) const \
-        -> cprime::array<UnderlyingType, Size + OtherSize> { \
-        cprime::array<UnderlyingType, Size + OtherSize> result({}); \
+        -> cprime::array<UnderlyingType, CPrimeArraySize + OtherSize> { \
+        cprime::array<UnderlyingType, CPrimeArraySize + OtherSize> result({}); \
         std::size_t result_index = 0; \
-        for (std::size_t index = 0; index < Size; ++index) { \
+        for (std::size_t index = 0; index < CPrimeArraySize; ++index) { \
             if (value[index] != UnderlyingType(0)) { result[result_index++] = value[index]; } \
         } \
         for (std::size_t index = 0; index < OtherSize; ++index) { \

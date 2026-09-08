@@ -10,6 +10,7 @@ Checks: >
   -misc-use-internal-linkage,
   modernize-*,
   -modernize-use-std-numbers,
+  -modernize-return-braced-init-list,
   performance-*,
   portability-*,
   readability-*,

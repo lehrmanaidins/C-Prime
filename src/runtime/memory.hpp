@@ -7,19 +7,22 @@ namespace cprime {
     // auto-dereferences on use.
     template <typename T>
     struct reference {
-        T* target;
-
         constexpr explicit reference(T& value) noexcept : target(&value) {}
         constexpr reference(const reference&) noexcept = default;
-        constexpr reference& operator=(const reference&) noexcept = default;
+        constexpr auto operator=(const reference&) noexcept -> reference& = default;
         reference(T&&) = delete;
 
         // Allow reference<X> -> reference<const X> (loss of write-through).
-        template <typename U, typename = std::enable_if_t<std::is_convertible_v<U*, T*>>>
+        template <typename U>
+        requires std::is_convertible_v<U*, T*>
         constexpr reference(const reference<U>& other) noexcept : target(other.target) {}
 
         constexpr operator T&() const noexcept { return *target; }
-        constexpr T& get() const noexcept { return *target; }
+        [[nodiscard]] constexpr auto get() const noexcept -> T& { return *target; }
+
+    private:
+        template <typename> friend struct reference;
+        T* target;
     };
 
     template <typename T>
@@ -29,21 +32,24 @@ namespace cprime {
     // construction inside an unsafe context.
     template <typename T>
     struct pointer {
-        T* address;
-
         constexpr explicit pointer(T& value) noexcept : address(&value) {}
         constexpr explicit pointer(T* value) noexcept : address(value) {}
         constexpr pointer(const pointer&) noexcept = default;
-        constexpr pointer& operator=(const pointer&) noexcept = default;
+        constexpr auto operator=(const pointer&) noexcept -> pointer& = default;
         pointer(T&&) = delete;
 
         // Allow pointer<X> -> pointer<const X> (loss of write-through).
-        template <typename U, typename = std::enable_if_t<std::is_convertible_v<U*, T*>>>
+        template <typename U>
+        requires std::is_convertible_v<U*, T*>
         constexpr pointer(const pointer<U>& other) noexcept : address(other.address) {}
 
         constexpr operator T&() const noexcept { return *address; }
-        constexpr T& get() const noexcept { return *address; }
-        constexpr T* raw() const noexcept { return address; }
+        [[nodiscard]] constexpr auto get() const noexcept -> T& { return *address; }
+        [[nodiscard]] constexpr auto raw() const noexcept -> T* { return address; }
+
+    private:
+        template <typename> friend struct pointer;
+        T* address;
     };
 
     template <typename T>
