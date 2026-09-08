@@ -13,4 +13,9 @@ enum class StringType {
 
 struct StringLiteralToken : Token<TokenType::StringLiteral> {
     StringType string_type;
+
+    StringLiteralToken(std::string lexeme, std::size_t line, std::size_t column)
+        : Token(lexeme, line, column),
+          string_type(StringType::String)
+    {}
 };
