@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "token.hpp"
+#include "../lexer_error.hpp"
 
 enum class OperatorType {
     Plus,
@@ -68,15 +69,16 @@ struct OperatorToken : Token<TokenType::Operator> {
 
     OperatorToken(std::string lexeme, std::size_t line, std::size_t column, OperatorType operator_type)
         : Token(lexeme, line, column),
-          operator_type(mapOperatorType(lexeme))
+          operator_type(mapOperatorType(lexeme, line, column))
     {}
 
-    static OperatorType mapOperatorType(const std::string& lexeme) {
+    static OperatorType mapOperatorType(const std::string& lexeme, std::size_t line, std::size_t column) {
         auto it = operator_map.find(lexeme);
         if (it != operator_map.end()) {
             return it->second;
         }
-        throw std::invalid_argument("Invalid operator lexeme: " + lexeme);
+        
+        throwLexerError("Invalid operator lexeme: " + lexeme, lexeme, line, column);
     }
 
     static bool isOperator(const std::string& lexeme) {

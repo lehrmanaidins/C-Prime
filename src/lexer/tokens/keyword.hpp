@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "token.hpp"
+#include "../lexer_error.hpp"
 
 enum class KeywordType {
     Type,
@@ -92,16 +93,16 @@ struct KeywordToken : Token<TokenType::Keyword> {
 
     KeywordToken(std::string lexeme, std::size_t line, std::size_t column)
         : Token(lexeme, line, column),
-         keyword_type(mapKeywordType(lexeme))
+         keyword_type(mapKeywordType(lexeme, line, column))
     {}
 
-    static KeywordType mapKeywordType(const std::string& lexeme) {
+    static KeywordType mapKeywordType(const std::string& lexeme, std::size_t line, std::size_t column) {
         auto it = keyword_map.find(lexeme);
         if (it != keyword_map.end()) {
             return it->second;
         }
         
-        throw std::runtime_error("Unknown keyword: " + lexeme);
+        throwLexerError("Unknown keyword: " + lexeme, lexeme, line, column);
     }
 
     static bool isKeyword(const std::string& lexeme) {
