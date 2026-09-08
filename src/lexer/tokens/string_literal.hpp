@@ -1,6 +1,10 @@
 
 #pragma once
- 
+
+#include <string>
+#include <unordered_map>
+#include <stdexcept>
+
 #include "token.hpp"
 
 enum class StringType {
