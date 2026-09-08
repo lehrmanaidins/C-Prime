@@ -7,14 +7,14 @@
 namespace lexemizer {
 
     enum class LexemeType {
-        WORD,
-        INTEGER_LITERAL,
-        FLOAT_LITERAL,
-        CHARACTER_LITERAL,
-        STRING_LITERAL,
-        SYMBOL,
-        WHITESPACE,
-        COMMENT
+        Word,
+        IntegerLiteral,
+        FloatLiteral,
+        CharacterLiteral,
+        StringLiteral,
+        Symbol,
+        Whitespace,
+        Comment
     };
 
     struct Lexeme {

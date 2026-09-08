@@ -9,7 +9,7 @@
 #include <optional>
 #include <unordered_map>
 
-#include "../io.cpp"
+#include "../../io.cpp"
 #include "lexeme.cpp"
 #include "lexeme_pattern.cpp"
 
