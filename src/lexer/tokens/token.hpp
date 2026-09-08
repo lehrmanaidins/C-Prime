@@ -5,8 +5,6 @@
 #include <unordered_map>
 #include <stdexcept>
 
-#include <string>
-
 enum class TokenType {
     Keyword,
     Identifier,

@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 #include "token.hpp"
+#include "../lexer_error.hpp"
 
 enum class StringType {
     String
