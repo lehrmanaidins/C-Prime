@@ -13,4 +13,9 @@ enum class IntegerLiteralType {
 
 struct IntegerLiteralToken : Token<TokenType::IntegerLiteral> {
     IntegerLiteralType integer_literal_type;
+
+    IntegerLiteralToken(std::string lexeme, std::size_t line, std::size_t column)
+        : Token(lexeme, line, column),
+          integer_literal_type(IntegerLiteralType::Integer)
+    {}
 };
