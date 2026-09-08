@@ -33,22 +33,6 @@ inline constexpr std::string_view WHITESPACE_REGEX_PATTERN =
 inline constexpr std::string_view COMMENT_REGEX_PATTERN =
     R"(//.*)";
 
-inline const std::unordered_map<LexemeType, std::string_view> LEXEME_TYPE_TO_STRING {
-    {LexemeType::Word, "WORD"},
-    {LexemeType::IntegerLiteral, "INTEGER_LITERAL"},
-    {LexemeType::FloatLiteral, "FLOAT_LITERAL"},
-    {LexemeType::CharacterLiteral, "CHARACTER_LITERAL"},
-    {LexemeType::StringLiteral, "STRING_LITERAL"},
-    {LexemeType::Symbol, "SYMBOL"},
-    {LexemeType::Whitespace, "WHITESPACE"},
-    {LexemeType::Comment, "COMMENT"}
-};
-
-std::ostream& operator<<(std::ostream& os, LexemeType type) {
-    os << LEXEME_TYPE_TO_STRING.at(type);
-    return os;
-}
-
 struct LexemePattern {
     LexemeType type;
     std::regex pattern;
