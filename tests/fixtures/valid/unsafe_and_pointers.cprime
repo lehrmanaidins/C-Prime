@@ -1,6 +1,7 @@
 unsafe function store(pointer<primitive uint32> tracked) -> primitive uint32 {
     unsafe {
         pointer<primitive uint32> alias = tracked;
+        (void) alias;
     }
     return 0;
 }

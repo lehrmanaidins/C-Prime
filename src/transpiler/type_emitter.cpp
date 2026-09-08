@@ -86,16 +86,20 @@ static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& cont
     } else if (!resolved_type.generic_arguments.empty()) {
         std::string qualified_name = resolved_type.name;
         std::vector<SemanticTypeRef> generic_arguments = resolved_type.generic_arguments;
-        if (resolved_type.name == "array" || resolved_type.name == "string") {
+        if (resolved_type.name == "array") {
             context.required_headers.insert("\"c-prime.hpp\"");
-            qualified_name = "cprime::" + resolved_type.name;
+            qualified_name = "std::" + resolved_type.name;
         }
         // C-Prime source writes `string<Size>` or `string<T, Size>` (element type
         // first, matching how it reads), but the runtime declares
         // `cprime::string<Size, T = char8>` so a bare `string<Size>` can default
         // the element type. Reorder the two-argument form to match.
-        if (resolved_type.name == "string" && generic_arguments.size() == 2) {
-            std::swap(generic_arguments[0], generic_arguments[1]);
+        if (resolved_type.name == "string") {
+            context.required_headers.insert("\"c-prime.hpp\"");
+            qualified_name = "cprime::" + resolved_type.name;
+            if (resolved_type.name == "string" && generic_arguments.size() == 2) {
+                std::swap(generic_arguments[0], generic_arguments[1]);
+            }
         }
         base = qualified_name + "<";
         for (size_t i = 0; i < generic_arguments.size(); ++i) {
@@ -125,7 +129,7 @@ static std::string emitTypeRef(const SemanticTypeRef& type, CppEmitContext& cont
         }
 
         context.required_headers.insert("\"c-prime.hpp\"");
-        base = "cprime::array<" + base + ", " + *it + ">";
+        base = "std::array<" + base + ", " + *it + ">";
     }
 
     return base;

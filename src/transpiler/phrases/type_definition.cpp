@@ -13,13 +13,13 @@ static void emitMemberFunction(
     std::string signature = nodiscardPrefix(return_type, function.is_discardable) + "auto " + function.name + "(";
     for (size_t indent = 0; indent < function.parameters.size(); ++indent) {
         if (indent > 0) signature += ", ";
-        signature += emitTypeRef(function.parameters[indent].type, context) + " " + function.parameters[indent].name;
+        signature += "[[maybe_unused]] " + emitTypeRef(function.parameters[indent].type, context) + " " + function.parameters[indent].name;
     }
     signature += ") -> " + return_type;
     appendLine(output, context, indent_str + signature + " {");
     if (function.has_requires) {
         context.required_headers.insert("<stdexcept>");
-        appendLine(output, context, indent_str + "    if consteval (!(" + emitExpression(function.requires_clause, context) + ")) { throw std::runtime_error(\"function requires clause violated\"); }");
+        appendLine(output, context, indent_str + "    if (!(" + emitExpression(function.requires_clause, context) + ")) { throw std::runtime_error(\"function requires clause violated\"); }");
     }
 
     const std::string previous_return_value_name = context.current_return_value_name;
@@ -64,13 +64,13 @@ enum class DomainUnderlyingKind {
     Character,
     String,
     Domain,
-    Composite,
+    Array,
     Struct
 };
 
 static DomainUnderlyingKind classifyDomainUnderlying(const SemanticTypeRef& base_type, const CppEmitContext& context) {
     if (!base_type.array_dimensions.empty()) {
-        return DomainUnderlyingKind::Composite;
+        return DomainUnderlyingKind::Array;
     }
     if (base_type.kind != SemanticTypeKind::Named) {
         return DomainUnderlyingKind::None;
@@ -103,7 +103,7 @@ static DomainUnderlyingKind classifyDomainUnderlying(const SemanticTypeRef& base
     if (n == "array" || n == "tuple" || n == "list" || n == "set" || n == "map" ||
         (n.find("[") != std::string::npos && n.find("]") == n.size() - 1 && n.find("[") < n.find("]"))
     ) {
-        return DomainUnderlyingKind::Composite;
+        return DomainUnderlyingKind::Array;
     }
 
     if (context.struct_types.find(n) != context.struct_types.end()) {
@@ -167,7 +167,7 @@ static std::string emitForwardingMemberFunction(CppEmitContext& context, const S
             call_arguments += ", ";
         }
         const std::string parameter_name = function.parameters[i].name;
-        signature += emitTypeRef(function.parameters[i].type, context) + " " + parameter_name;
+        signature += "[[maybe_unused]] " + emitTypeRef(function.parameters[i].type, context) + " " + parameter_name;
         call_arguments += parameter_name;
     }
     signature += ") -> " + return_type;
@@ -263,14 +263,15 @@ static void emitDomainOperators(
         case DomainUnderlyingKind::Floating:         members_macro = "CPRIME_FLOAT_TYPE"; break;
         case DomainUnderlyingKind::Boolean:          members_macro = "CPRIME_BOOLEAN_TYPE"; break;
         case DomainUnderlyingKind::Character:        members_macro = "CPRIME_CHARACTER_TYPE"; break;
-        case DomainUnderlyingKind::Composite:        members_macro = "CPRIME_COMPOSITE_TYPE"; break;
+        case DomainUnderlyingKind::Array:            members_macro = "CPRIME_ARRAY_TYPE"; break;
+        case DomainUnderlyingKind::String:           members_macro = "CPRIME_STRING_TYPE"; break;
         default:
             throw std::runtime_error("Transpile error: cannot resolve the underlying type of domain type '" + name + "'");
     }
 
     // A composite underlying carries a top-level comma, so the CPRIME_*_TYPE
     // macros expect it parenthesised; other underlyings are passed bare.
-    if (kind == DomainUnderlyingKind::Composite) {
+    if (kind == DomainUnderlyingKind::Array) {
         base_type_str = "(" + base_type_str + ")";
     } else if (base_type_str.find(' ') != std::string::npos) {
         base_type_str = "(" + base_type_str + ")";
@@ -324,10 +325,10 @@ static void emitTypeDefinitionStatement(
         context.pushLine(type_def.location, "type");
         context.required_headers.insert("\"c-prime.hpp\"");
 
-        appendLine(output, context, indent_str + "template <std::size_t CPrimeArrayLength>");
+        appendLine(output, context, indent_str + "template <std::size_t Size>");
         appendLine(output, context, indent_str + "struct " + type_def.name + " {");
-        appendLine(output, context, indent_str + "    CPRIME_COMPOSITE_MEMBERS(" + type_def.name
-            + ", (cprime::array<" + element_type_str + ", CPrimeArrayLength>))");
+        appendLine(output, context, indent_str + "    CPRIME_ARRAY_MEMBERS(" + type_def.name
+            + ", (std::array<" + element_type_str + ", Size>))");
         appendLine(output, context, indent_str + "};");
         return;
     }
@@ -342,7 +343,9 @@ static void emitTypeDefinitionStatement(
     context.domain_base_types[type_def.name] = type_def.base_type;
     context.domain_member_functions[type_def.name] = type_def.member_functions;
     context.pushLine(type_def.location, "type");
-    context.required_headers.insert("<stdexcept>");
+    if (type_def.has_requires || type_def.has_ensures) {
+        context.required_headers.insert("<stdexcept>");
+    }
 
     const std::string base_type_str = emitTypeRef(type_def.base_type, context);
     const std::string name = type_def.name;
