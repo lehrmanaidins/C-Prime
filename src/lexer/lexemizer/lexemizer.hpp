@@ -20,10 +20,11 @@ std::vector<Lexeme> lexemize(const std::vector<std::string>& source) {
         std::exit(EXIT_FAILURE);
     }
 
+    static bool lexemizer_error = false;
     std::vector<Lexeme> lexemes;
 
-    for (std::size_t line = 0; line < source.size(); ++line) {
-        const std::string& line_str = source[line];
+    for (std::size_t line = 1; line < source.size(); line += 1) {
+        const std::string& line_str = source[line - 1];
 
         std::size_t index = 0;
         std::size_t column = 1;
@@ -47,7 +48,7 @@ std::vector<Lexeme> lexemize(const std::vector<std::string>& source) {
                             .type = lexeme_pattern.type,
                             .lexeme_text = match.str(),
                             .line_text = line_str,
-                            .line_number = line + 1,
+                            .line_number = line,
                             .column_number = column
                         };
                     }
@@ -57,8 +58,16 @@ std::vector<Lexeme> lexemize(const std::vector<std::string>& source) {
             if (!matched_lexeme) {
                 const unsigned char character =
                     static_cast<unsigned char>(line_str[index]);
-
-                throwLexerError("Unexpected character: " + std::string(1, line_str[index]), line_str, line + 1, column);
+                
+                throwLexerError("Unexpected Character: " + std::string(1, line_str[index]), line_str, line, column);
+                lexemizer_error = true;
+                matched_lexeme = Lexeme{
+                    .type = LexemeType::Unknown,
+                    .lexeme_text = std::string(1, line_str[index]),
+                    .line_text = line_str,
+                    .line_number = line,
+                    .column_number = column
+                };
             }
 
             lexemes.push_back(*matched_lexeme);
@@ -66,6 +75,10 @@ std::vector<Lexeme> lexemize(const std::vector<std::string>& source) {
             index += matched_lexeme->lexeme_text.size();
             column += matched_lexeme->lexeme_text.size();
         }
+    }
+
+    if (lexemizer_error) {
+        std::exit(EXIT_FAILURE);
     }
 
     return lexemes;

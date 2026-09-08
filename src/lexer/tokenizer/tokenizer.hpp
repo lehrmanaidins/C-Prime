@@ -41,6 +41,7 @@ std::string toString(const TokenVariant& token) {
 }
 
 std::vector<TokenVariant> tokenize(const std::vector<Lexeme>& source) {
+    static bool tokenizer_error = false;
     std::vector<TokenVariant> tokens;
     
     for (const Lexeme& lexeme : source) {
@@ -75,6 +76,7 @@ std::vector<TokenVariant> tokenize(const std::vector<Lexeme>& source) {
                     continue;
                 }
                 throwLexerError("Unknown Symbol Lexeme: " + lexeme.lexeme_text, lexeme.line_text, lexeme.line_number, lexeme.column_number);
+                tokenizer_error = true;
                 break;
             case LexemeType::Whitespace:
                 tokens.push_back(WhiteSpaceToken(lexeme));
@@ -84,8 +86,13 @@ std::vector<TokenVariant> tokenize(const std::vector<Lexeme>& source) {
                 break;
             default:
                 throwLexerError("Unknown Lexeme: " + toString(lexeme), lexeme.line_text, lexeme.line_number, lexeme.column_number);
+                tokenizer_error = true;
                 break;
         }
+    }
+
+    if (tokenizer_error) {
+        std::exit(EXIT_FAILURE);
     }
 
     return tokens;

@@ -6,6 +6,7 @@
 #include <cstddef>
 
 enum class LexemeType {
+    Unknown,
     Word,
     IntegerLiteral,
     FloatLiteral,
@@ -17,6 +18,7 @@ enum class LexemeType {
 };
 
 static const std::unordered_map<LexemeType, std::string> lexeme_string_map {
+    {LexemeType::Unknown, "Unknown"},
     {LexemeType::Word, "Word"},
     {LexemeType::IntegerLiteral, "IntegerLiteral"},
     {LexemeType::FloatLiteral, "FloatLiteral"},
