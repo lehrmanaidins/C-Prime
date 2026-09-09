@@ -1,4 +1,0 @@
-function main() {
-    primitive uint32 value = 1;
-    value = 2;
-}

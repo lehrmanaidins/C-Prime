@@ -8,50 +8,46 @@
 #include "token.hpp"
 #include "../lexer_error.hpp"
 
-enum class CommentType {
+enum class CommentTokenType {
     Unknown,
     SingleLine,
     MultiLine
 };
 
-static const std::unordered_map<CommentType, std::string_view> comment_type_to_string = {
-    {CommentType::Unknown, "Unknown"},
-    {CommentType::SingleLine, "SingleLine"},
-    {CommentType::MultiLine, "MultiLine"},
+static const std::unordered_map<CommentTokenType, std::string> comment_token_type_to_string = {
+    {CommentTokenType::Unknown, "Unknown"},
+    {CommentTokenType::SingleLine, "SingleLine"},
+    {CommentTokenType::MultiLine, "MultiLine"},
 };
 
-std::string_view toString(CommentType comment_type) {
-    return comment_type_to_string.at(comment_type);
-}
-
-static const std::unordered_map<std::string, CommentType> comment_map = {
-    {"//", CommentType::SingleLine},
-    {"/*", CommentType::MultiLine}
+static const std::unordered_map<std::string, CommentTokenType> comment_map = {
+    {"//", CommentTokenType::SingleLine},
+    {"/*", CommentTokenType::MultiLine}
 };
 
-struct CommentToken : Token<TokenType::Comment> {
-    CommentType comment_type;
+struct CommentToken : Token {
+    CommentTokenType comment_type;
 
     CommentToken(const Lexeme& lexeme)
-        : Token<TokenType::Comment>(lexeme),
-          comment_type(mapCommentType(lexeme))
+        : Token(lexeme),
+          comment_type(mapCommentTokenType(lexeme))
     {}
 
-    static CommentType mapCommentType(const Lexeme& lexeme) {
+    static CommentTokenType mapCommentTokenType(const Lexeme& lexeme) {
         auto it = comment_map.find(lexeme.lexeme_text.substr(0, 2));
         if (it != comment_map.end()) {
             return it->second;
         }
         throwLexerError("Unknown Comment: " + lexeme.lexeme_text, lexeme.line_text, lexeme.line_number, lexeme.column_number);
-        return CommentType::Unknown;
+        return CommentTokenType::Unknown;
+    }
+
+    std::string toString() const override {
+        std::string lexeme_str = "CommentToken = {";
+        lexeme_str += comment_token_type_to_string.at(comment_type) + ", ";
+        lexeme_str += "\"" + lexeme_text + "\", ";
+        lexeme_str += "(" + std::to_string(line_number) + ", ";
+        lexeme_str += std::to_string(column_number) + ")}";
+        return lexeme_str;
     }
 };
-
-std::string toString(const CommentToken& token) {
-    std::string lexeme_str = "CommentToken = {";
-    lexeme_str += std::string(toString(token.comment_type)) + ", ";
-    lexeme_str += "\"" + token.lexeme_text + "\", ";
-    lexeme_str += "(" + std::to_string(token.line_number) + ", ";
-    lexeme_str += std::to_string(token.column_number) + ")}";
-    return lexeme_str;
-}

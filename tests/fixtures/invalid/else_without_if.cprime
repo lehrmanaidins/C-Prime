@@ -1,5 +1,0 @@
-function main() {
-    else {
-        println("no if");
-    }
-}

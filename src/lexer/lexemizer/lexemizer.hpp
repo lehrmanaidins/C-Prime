@@ -14,7 +14,7 @@
 #include "lexeme.hpp"
 #include "lexeme_pattern.hpp"
 
-std::vector<Lexeme> lexemize(const std::vector<std::string>& source) {
+std::vector<Lexeme> sourceToLexemes(const std::vector<std::string>& source) {
     if (source.empty()) {
         std::cerr << "lexemize(): `source` is empty." << std::endl;
         std::exit(EXIT_FAILURE);
@@ -79,6 +79,38 @@ std::vector<Lexeme> lexemize(const std::vector<std::string>& source) {
 
     if (lexemizer_error) {
         std::exit(EXIT_FAILURE);
+    }
+
+    return lexemes;
+}
+
+bool isValidLexemeSequence(const Lexeme& current_lexeme, const Lexeme& next_lexeme) {
+    const LexemeType current_type = current_lexeme.type;
+    const LexemeType next_type = next_lexeme.type;
+
+    const bool is_integer_followed_by_word = (current_type == LexemeType::IntegerLiteral && next_type == LexemeType::Word);
+    const bool is_float_followed_by_word = (current_type == LexemeType::FloatLiteral && next_type == LexemeType::Word);
+
+    const bool is_valid_lexeme_sequence = !(is_integer_followed_by_word || is_float_followed_by_word);
+
+    return is_valid_lexeme_sequence;
+}
+
+std::vector<Lexeme> lexemize(const std::vector<std::string>& source) {
+    std::vector<Lexeme> lexemes = sourceToLexemes(source);
+
+    for (std::size_t i = 0; i + 1 < lexemes.size(); i += 1) {
+        const Lexeme& current_lexeme = lexemes[i];
+        const Lexeme& next_lexeme = lexemes[i + 1];
+
+         if (!isValidLexemeSequence(current_lexeme, next_lexeme)) {
+            throwLexerError(
+                "Inproper Lexeme Sequence: " + current_lexeme.lexeme_text + next_lexeme.lexeme_text, 
+                current_lexeme.line_text,
+                current_lexeme.line_number,
+                current_lexeme.column_number
+            );
+        }
     }
 
     return lexemes;

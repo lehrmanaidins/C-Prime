@@ -1,7 +1,0 @@
-template <type T>
-type Checked : T {
-    requires (true);
-}
-
-function main() {
-}

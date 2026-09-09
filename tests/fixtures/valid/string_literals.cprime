@@ -1,4 +1,0 @@
-function main() {
-    println("Hello, from C-Prime!");
-    println("comma, inside, string");
-}

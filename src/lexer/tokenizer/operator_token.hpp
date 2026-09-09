@@ -8,7 +8,7 @@
 #include "token.hpp"
 #include "../lexer_error.hpp"
 
-enum class OperatorType {
+enum class OperatorTokenType {
     Unknown,
     Plus,
     Minus,
@@ -37,95 +37,91 @@ enum class OperatorType {
     Dollar
 };
 
-static const std::unordered_map<OperatorType, std::string_view> operator_type_to_string = {
-    {OperatorType::Unknown, "Unknown"},
-    {OperatorType::Plus, "Plus"},
-    {OperatorType::Minus, "Minus"},
-    {OperatorType::Asterisk, "Asterisk"},
-    {OperatorType::Slash, "Slash"},
-    {OperatorType::Percent, "Percent"},
-    {OperatorType::Equals, "Equals"},
-    {OperatorType::LessThan, "LessThan"},
-    {OperatorType::GreaterThan, "GreaterThan"},
-    {OperatorType::Exclamation, "Exclamation"},
-    {OperatorType::Ampersand, "Ampersand"},
-    {OperatorType::Pipe, "Pipe"},
-    {OperatorType::Caret, "Caret"},
-    {OperatorType::Tilde, "Tilde"},
-    {OperatorType::Dot, "Dot"},
-    {OperatorType::Colon, "Colon"},
-    {OperatorType::Question, "Question"},
-    {OperatorType::LeftParenthesis, "LeftParenthesis"},
-    {OperatorType::RightParenthesis, "RightParenthesis"},
-    {OperatorType::LeftBracket, "LeftBracket"},
-    {OperatorType::RightBracket, "RightBracket"},
-    {OperatorType::LeftBrace, "LeftBrace"},
-    {OperatorType::RightBrace, "RightBrace"},
-    {OperatorType::At, "At"},
-    {OperatorType::Octothorpe, "Octothorpe"},
-    {OperatorType::Dollar, "Dollar"},
+static const std::unordered_map<OperatorTokenType, std::string> operator_token_type_to_string = {
+    {OperatorTokenType::Unknown, "Unknown"},
+    {OperatorTokenType::Plus, "Plus"},
+    {OperatorTokenType::Minus, "Minus"},
+    {OperatorTokenType::Asterisk, "Asterisk"},
+    {OperatorTokenType::Slash, "Slash"},
+    {OperatorTokenType::Percent, "Percent"},
+    {OperatorTokenType::Equals, "Equals"},
+    {OperatorTokenType::LessThan, "LessThan"},
+    {OperatorTokenType::GreaterThan, "GreaterThan"},
+    {OperatorTokenType::Exclamation, "Exclamation"},
+    {OperatorTokenType::Ampersand, "Ampersand"},
+    {OperatorTokenType::Pipe, "Pipe"},
+    {OperatorTokenType::Caret, "Caret"},
+    {OperatorTokenType::Tilde, "Tilde"},
+    {OperatorTokenType::Dot, "Dot"},
+    {OperatorTokenType::Colon, "Colon"},
+    {OperatorTokenType::Question, "Question"},
+    {OperatorTokenType::LeftParenthesis, "LeftParenthesis"},
+    {OperatorTokenType::RightParenthesis, "RightParenthesis"},
+    {OperatorTokenType::LeftBracket, "LeftBracket"},
+    {OperatorTokenType::RightBracket, "RightBracket"},
+    {OperatorTokenType::LeftBrace, "LeftBrace"},
+    {OperatorTokenType::RightBrace, "RightBrace"},
+    {OperatorTokenType::At, "At"},
+    {OperatorTokenType::Octothorpe, "Octothorpe"},
+    {OperatorTokenType::Dollar, "Dollar"},
 };
 
-std::string_view toString(OperatorType operator_type) {
-    return operator_type_to_string.at(operator_type);
-}
-
-static const std::unordered_map<std::string, OperatorType> operator_map = {
-    {"+", OperatorType::Plus},
-    {"-", OperatorType::Minus},
-    {"*", OperatorType::Asterisk},
-    {"/", OperatorType::Slash},
-    {"%", OperatorType::Percent},
-    {"=", OperatorType::Equals},
-    {"<", OperatorType::LessThan},
-    {">", OperatorType::GreaterThan},
-    {"!", OperatorType::Exclamation},
-    {"&", OperatorType::Ampersand},
-    {"|", OperatorType::Pipe},
-    {"^", OperatorType::Caret},
-    {"~", OperatorType::Tilde},
-    {".", OperatorType::Dot},
-    {":", OperatorType::Colon},
-    {"?", OperatorType::Question},
-    {"(", OperatorType::LeftParenthesis},
-    {")", OperatorType::RightParenthesis},
-    {"[", OperatorType::LeftBracket},
-    {"]", OperatorType::RightBracket},
-    {"{", OperatorType::LeftBrace},
-    {"}", OperatorType::RightBrace},
-    {"@", OperatorType::At},
-    {"#", OperatorType::Octothorpe},
-    {"$", OperatorType::Dollar}
+static const std::unordered_map<std::string, OperatorTokenType> operator_map = {
+    {"+", OperatorTokenType::Plus},
+    {"-", OperatorTokenType::Minus},
+    {"*", OperatorTokenType::Asterisk},
+    {"/", OperatorTokenType::Slash},
+    {"%", OperatorTokenType::Percent},
+    {"=", OperatorTokenType::Equals},
+    {"<", OperatorTokenType::LessThan},
+    {">", OperatorTokenType::GreaterThan},
+    {"!", OperatorTokenType::Exclamation},
+    {"&", OperatorTokenType::Ampersand},
+    {"|", OperatorTokenType::Pipe},
+    {"^", OperatorTokenType::Caret},
+    {"~", OperatorTokenType::Tilde},
+    {".", OperatorTokenType::Dot},
+    {":", OperatorTokenType::Colon},
+    {"?", OperatorTokenType::Question},
+    {"(", OperatorTokenType::LeftParenthesis},
+    {")", OperatorTokenType::RightParenthesis},
+    {"[", OperatorTokenType::LeftBracket},
+    {"]", OperatorTokenType::RightBracket},
+    {"{", OperatorTokenType::LeftBrace},
+    {"}", OperatorTokenType::RightBrace},
+    {"@", OperatorTokenType::At},
+    {"#", OperatorTokenType::Octothorpe},
+    {"$", OperatorTokenType::Dollar}
 };
 
-struct OperatorToken : Token<TokenType::Operator> {
-    OperatorType operator_type;
+struct OperatorToken : Token {
+    OperatorTokenType operator_type;
 
     OperatorToken(const Lexeme& lexeme)
-        : Token<TokenType::Operator>(lexeme),
-          operator_type(mapOperatorType(lexeme))
+        : Token(lexeme),
+          operator_type(mapOperatorTokenType(lexeme))
     {}
 
-    static OperatorType mapOperatorType(const Lexeme& lexeme) {
+    static OperatorTokenType mapOperatorTokenType(const Lexeme& lexeme) {
         auto it = operator_map.find(lexeme.lexeme_text);
         if (it != operator_map.end()) {
             return it->second;
         }
         
         throwLexerError("Unknown Operator: " + lexeme.lexeme_text, lexeme.line_text, lexeme.line_number, lexeme.column_number);
-        return OperatorType::Unknown;
+        return OperatorTokenType::Unknown;
     }
 
     static bool isOperator(const Lexeme& lexeme) {
         return operator_map.find(lexeme.lexeme_text) != operator_map.end();
     }
-};
 
-std::string toString(const OperatorToken& token) {
-    std::string lexeme_str = "OperatorToken = {";
-    lexeme_str += std::string(toString(token.operator_type)) + ", ";
-    lexeme_str += "\"" + token.lexeme_text + "\", ";
-    lexeme_str += "(" + std::to_string(token.line_number) + ", ";
-    lexeme_str += std::to_string(token.column_number) + ")}";
-    return lexeme_str;
-}
+    std::string toString() const override {
+        std::string lexeme_str = "OperatorToken = {";
+        lexeme_str += operator_token_type_to_string.at(operator_type) + ", ";
+        lexeme_str += "\"" + lexeme_text + "\", ";
+        lexeme_str += "(" + std::to_string(line_number) + ", ";
+        lexeme_str += std::to_string(column_number) + ")}";
+        return lexeme_str;
+    }
+};

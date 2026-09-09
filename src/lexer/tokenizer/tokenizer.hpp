@@ -37,7 +37,7 @@ using TokenVariant = std::variant<
 >;
 
 std::string toString(const TokenVariant& token) {
-    return std::visit([](const auto& t) { return toString(t); }, token);
+    return std::visit([](const auto& t) { return t.toString(); }, token);
 }
 
 std::vector<TokenVariant> tokenize(const std::vector<Lexeme>& source) {
@@ -85,7 +85,7 @@ std::vector<TokenVariant> tokenize(const std::vector<Lexeme>& source) {
                 tokens.push_back(CommentToken(lexeme));
                 break;
             default:
-                throwLexerError("Unknown Lexeme: " + toString(lexeme), lexeme.line_text, lexeme.line_number, lexeme.column_number);
+                throwLexerError("Unknown Lexeme: " + lexeme.toString(), lexeme.line_text, lexeme.line_number, lexeme.column_number);
                 tokenizer_error = true;
                 break;
         }

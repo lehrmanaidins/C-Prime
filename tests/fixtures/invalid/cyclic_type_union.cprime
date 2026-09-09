@@ -1,5 +1,0 @@
-union First : Second;
-union Second : First;
-
-function main() {
-}

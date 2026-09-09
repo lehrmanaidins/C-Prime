@@ -6,16 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 add_executable(cprime ./src/cprime.cpp)
 
-# Rebuild when an embedded resource (src/embedded/resources.hpp `#embed`s these)
-# changes.
-#set_property(TARGET cprime APPEND PROPERTY OBJECT_DEPENDS
-#    ${CMAKE_SOURCE_DIR}/src/lists/separators.txt
-#    ${CMAKE_SOURCE_DIR}/src/lists/delimiters.txt
-#    ${CMAKE_SOURCE_DIR}/src/lists/keywords.txt
-#    ${CMAKE_SOURCE_DIR}/src/lists/primitives.txt
-#    ${CMAKE_SOURCE_DIR}/src/lists/operators.txt
-#    ${CMAKE_SOURCE_DIR}/src/lists/cpp_builtins.txt
-#    ${CMAKE_SOURCE_DIR}/src/runtime/c-prime.hpp
-#    ${CMAKE_SOURCE_DIR}/src/runtime/std.hpp
-#    ${CMAKE_SOURCE_DIR}/src/runtime/std.hprime
-#)
+add_compile_options(-Wall -Wextra -Wpedantic -Werror -d)
+
+# enable_testing()
+# add_subdirectory(tests)

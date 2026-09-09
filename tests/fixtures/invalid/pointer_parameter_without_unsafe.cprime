@@ -1,5 +1,0 @@
-function needs_unsafe(pointer<primitive uint32> p) -> void {
-}
-
-function main() {
-}
