@@ -44,7 +44,7 @@ struct WhiteSpaceToken : Token {
         if (it != whitespace_map.end()) {
             return it->second;
         }
-        throwLexerError("Unknown WhiteSpace: " + lexeme.lexeme_text, lexeme.line_text, lexeme.line_number, lexeme.column_number);
+        printLexemeError("unknown whitespace" + lexeme.lexeme_text, lexeme);
         return WhiteSpaceTokenType::Unknown;
     }
 

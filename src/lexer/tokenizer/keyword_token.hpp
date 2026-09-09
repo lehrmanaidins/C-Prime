@@ -144,7 +144,7 @@ struct KeywordToken : Token {
             return it->second;
         }
         
-        throwLexerError("Unknown Keyword: " + lexeme.lexeme_text, lexeme.line_text, lexeme.line_number, lexeme.column_number);
+        printLexemeError("unknown keyword" + lexeme.lexeme_text, lexeme);
         return KeywordTokenType::Unknown;
     }
 

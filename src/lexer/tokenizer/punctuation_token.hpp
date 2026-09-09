@@ -38,7 +38,7 @@ struct PunctuationToken : Token {
         if (it != punctuation_map.end()) {
             return it->second;
         }
-        throwLexerError("Unknown Punctuation: " + lexeme.lexeme_text, lexeme.line_text, lexeme.line_number, lexeme.column_number);
+        printLexemeError("unknown punctuation" + lexeme.lexeme_text, lexeme);
         return PunctuationTokenType::Unknown;
     }
 

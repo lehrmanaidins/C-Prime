@@ -13,9 +13,14 @@
 #include "tokenizer/tokenizer.hpp"
 
 std::vector<TokenVariant> lexFile(const std::string& filename) {
-    std::vector<std::string> lines = io::readFileLines(filename); 
+    std::vector<std::string> lines = io::readFileLines(filename);
 
-    std::vector<Lexeme> lexemes = lexemize(lines);
+    Source source{
+        .filename = filename,
+        .lines = lines
+    };
+
+    std::vector<Lexeme> lexemes = lexemize(source);
 
     std::vector<TokenVariant> tokens = tokenize(lexemes);
 

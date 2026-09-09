@@ -108,7 +108,7 @@ struct OperatorToken : Token {
             return it->second;
         }
         
-        throwLexerError("Unknown Operator: " + lexeme.lexeme_text, lexeme.line_text, lexeme.line_number, lexeme.column_number);
+        printLexemeError("unknown operator" + lexeme.lexeme_text, lexeme);
         return OperatorTokenType::Unknown;
     }
 
