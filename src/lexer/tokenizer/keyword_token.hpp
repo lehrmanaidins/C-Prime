@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 #include "token.hpp"
-#include "../lexer_error.hpp"
+#include "../../error.hpp"
 
 enum class KeywordTokenType {
     Unknown,
@@ -139,25 +139,25 @@ struct KeywordToken : Token {
     {}
 
     static KeywordTokenType mapKeywordTokenType(const Lexeme& lexeme) {
-        auto it = keyword_map.find(lexeme.lexeme_text);
+        auto it = keyword_map.find(lexeme.text);
         if (it != keyword_map.end()) {
             return it->second;
         }
         
-        printLexemeError("unknown keyword" + lexeme.lexeme_text, lexeme);
+        printError("unknown keyword" + lexeme.text, lexeme);
         return KeywordTokenType::Unknown;
     }
 
     static bool isKeyword(const Lexeme& lexeme) {
-        return keyword_map.find(lexeme.lexeme_text) != keyword_map.end();
+        return keyword_map.find(lexeme.text) != keyword_map.end();
     }
 
     std::string toString() const override {
         std::string lexeme_str = "KeywordToken = {";
         lexeme_str += keyword_token_type_to_string.at(keyword_type) + ", ";
-        lexeme_str += "\"" + lexeme_text + "\", ";
-        lexeme_str += "(" + std::to_string(line_number) + ", ";
-        lexeme_str += std::to_string(column_number) + ")}";
+        lexeme_str += "\"" + lexeme.text + "\", ";
+        lexeme_str += "(" + std::to_string(lexeme.location.line) + ", ";
+        lexeme_str += std::to_string(lexeme.location.column) + ")}";
         return lexeme_str;
     }
 };

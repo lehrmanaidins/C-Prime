@@ -1,5 +1,5 @@
 
 function main() {
     123_456_789
-    123test
+    123_test
 }

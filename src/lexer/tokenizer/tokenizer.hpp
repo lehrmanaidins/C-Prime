@@ -21,24 +21,9 @@
 #include "whitespace_token.hpp"
 #include "comment_token.hpp"
 
-#include "../lexer_error.hpp"
+#include "token_variant.hpp"
 
-using TokenVariant = std::variant<
-    KeywordToken,
-    IdentifierToken,
-    IntegerLiteralToken,
-    FloatLiteralToken,
-    CharacterLiteralToken,
-    StringLiteralToken,
-    OperatorToken,
-    PunctuationToken,
-    WhiteSpaceToken,
-    CommentToken
->;
-
-std::string toString(const TokenVariant& token) {
-    return std::visit([](const auto& t) { return t.toString(); }, token);
-}
+#include "../../error.hpp"
 
 std::vector<TokenVariant> tokenize(const std::vector<Lexeme>& source) {
     static bool tokenizer_error = false;
@@ -75,7 +60,7 @@ std::vector<TokenVariant> tokenize(const std::vector<Lexeme>& source) {
                     tokens.push_back(PunctuationToken(lexeme));
                     continue;
                 }
-                printLexemeError("unknown symbol lexeme", lexeme);
+                printError("unknown symbol lexeme", lexeme);
                 tokenizer_error = true;
                 break;
             case LexemeType::Whitespace:
@@ -85,7 +70,7 @@ std::vector<TokenVariant> tokenize(const std::vector<Lexeme>& source) {
                 tokens.push_back(CommentToken(lexeme));
                 break;
             default:
-                printLexemeError("unknown lexeme", lexeme);
+                printError("unknown lexeme", lexeme);
                 tokenizer_error = true;
                 break;
         }

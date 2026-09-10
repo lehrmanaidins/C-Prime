@@ -10,9 +10,10 @@
 #include <unordered_map>
 
 #include "../../io.hpp"
-#include "../lexer_error.hpp"
+#include "../../error.hpp"
 #include "lexeme.hpp"
 #include "lexeme_pattern.hpp"
+#include "../../source/source_location.hpp"
 
 struct Source {
     std::string filename;
@@ -21,13 +22,15 @@ struct Source {
 
 std::vector<Lexeme> sourceToLexemes(const Source& source) {
     if (source.lines.empty()) {
-        printLexemeError("source is empty", Lexeme{
+        printError("source is empty", Lexeme{
             .type = LexemeType::Unknown,
-            .lexeme_text = "",
+            .text = "",
             .filename = source.filename,
-            .line_text = "",
-            .line_number = 0,
-            .column_number = 0
+            .source_line_text = "",
+            .location = SourceLocation{
+                .line = 0,
+                .column = 0
+            }
         });
         std::exit(EXIT_FAILURE);
     }
@@ -55,14 +58,16 @@ std::vector<Lexeme> sourceToLexemes(const Source& source) {
                         std::regex_constants::match_continuous)) {
 
                     // Longest match wins.
-                    if (!matched_lexeme || match.length() > matched_lexeme->lexeme_text.length()) {
+                    if (!matched_lexeme || match.length() > matched_lexeme->text.length()) {
                         matched_lexeme = Lexeme{
                             .type = lexeme_pattern.type,
-                            .lexeme_text = match.str(),
+                            .text = match.str(),
                             .filename = source.filename,
-                            .line_text = line_str,
-                            .line_number = line,
-                            .column_number = column
+                            .source_line_text = line_str,
+                            .location = SourceLocation{
+                                .line = line,
+                                .column = column
+                            }
                         };
                     }
                 }
@@ -72,29 +77,33 @@ std::vector<Lexeme> sourceToLexemes(const Source& source) {
                 const unsigned char character =
                     static_cast<unsigned char>(line_str[index]);
                 
-                printLexemeError("invalid character", Lexeme{
+                printError("invalid character", Lexeme{
                     .type = LexemeType::Unknown,
-                    .lexeme_text = std::string(1, line_str[index]),
+                    .text = std::string(1, line_str[index]),
                     .filename = source.filename,
-                    .line_text = line_str,
-                    .line_number = line,
-                    .column_number = column
+                    .source_line_text = line_str,
+                    .location = SourceLocation{
+                        .line = line,
+                        .column = column
+                    }
                 });
                 lexemizer_error = true;
                 matched_lexeme = Lexeme{
                     .type = LexemeType::Unknown,
-                    .lexeme_text = std::string(1, line_str[index]),
+                    .text = std::string(1, line_str[index]),
                     .filename = source.filename,
-                    .line_text = line_str,
-                    .line_number = line,
-                    .column_number = column
+                    .source_line_text = line_str,
+                    .location = SourceLocation{
+                        .line = line,
+                        .column = column
+                    }
                 };
             }
 
             lexemes.push_back(*matched_lexeme);
 
-            index += matched_lexeme->lexeme_text.size();
-            column += matched_lexeme->lexeme_text.size();
+            index += matched_lexeme->text.size();
+            column += matched_lexeme->text.size();
         }
     }
 
@@ -125,15 +134,17 @@ void checkForValidLexemeSequences(const std::string& filename, const std::vector
 
          if (!isValidLexemeSequence(current_lexeme, next_lexeme)) {
             lexeme_sequence_error = true;
-            printLexemeError(
+            printError(
                 "invalid lexeme",
                 Lexeme{
                     .type = current_lexeme.type,
-                    .lexeme_text = current_lexeme.lexeme_text + next_lexeme.lexeme_text,
+                    .text = current_lexeme.text + next_lexeme.text,
                     .filename = current_lexeme.filename,
-                    .line_text = current_lexeme.line_text,
-                    .line_number = current_lexeme.line_number,
-                    .column_number = current_lexeme.column_number
+                    .source_line_text = current_lexeme.source_line_text,
+                    .location = SourceLocation{
+                        .line = current_lexeme.location.line,
+                        .column = current_lexeme.location.column
+                    }
                 }
             );
         }

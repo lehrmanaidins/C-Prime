@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 #include "token.hpp"
-#include "../lexer_error.hpp"
+#include "../../error.hpp"
 
 enum class StringTokenType {
     Unknown,
@@ -29,9 +29,9 @@ struct StringLiteralToken : Token {
     std::string toString() const override {
         std::string lexeme_str = "StringLiteralToken = {";
         lexeme_str += string_token_type_to_string.at(string_type) + ", ";
-        lexeme_str += "\"" + lexeme_text + "\", ";
-        lexeme_str += "(" + std::to_string(line_number) + ", ";
-        lexeme_str += std::to_string(column_number) + ")}";
+        lexeme_str += "\"" + lexeme.text + "\", ";
+        lexeme_str += "(" + std::to_string(lexeme.location.line) + ", ";
+        lexeme_str += std::to_string(lexeme.location.column) + ")}";
         return lexeme_str;
     }
 };

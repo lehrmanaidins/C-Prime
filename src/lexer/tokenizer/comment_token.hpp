@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 #include "token.hpp"
-#include "../lexer_error.hpp"
+#include "../../error.hpp"
 
 enum class CommentTokenType {
     Unknown,
@@ -34,20 +34,20 @@ struct CommentToken : Token {
     {}
 
     static CommentTokenType mapCommentTokenType(const Lexeme& lexeme) {
-        auto it = comment_map.find(lexeme.lexeme_text.substr(0, 2));
+        auto it = comment_map.find(lexeme.text.substr(0, 2));
         if (it != comment_map.end()) {
             return it->second;
         }
-        printLexemeError("unknown comment" + lexeme.lexeme_text, lexeme);
+        printError("unknown comment" + lexeme.text, lexeme);
         return CommentTokenType::Unknown;
     }
 
     std::string toString() const override {
         std::string lexeme_str = "CommentToken = {";
         lexeme_str += comment_token_type_to_string.at(comment_type) + ", ";
-        lexeme_str += "\"" + lexeme_text + "\", ";
-        lexeme_str += "(" + std::to_string(line_number) + ", ";
-        lexeme_str += std::to_string(column_number) + ")}";
+        lexeme_str += "\"" + lexeme.text + "\", ";
+        lexeme_str += "(" + std::to_string(lexeme.location.line) + ", ";
+        lexeme_str += std::to_string(lexeme.location.column) + ")}";
         return lexeme_str;
     }
 };

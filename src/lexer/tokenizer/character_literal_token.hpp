@@ -7,7 +7,7 @@
 
 #include "../lexemizer/lexeme.hpp"
 #include "token.hpp"
-#include "../lexer_error.hpp"
+#include "../../error.hpp"
 
 enum class CharacterLiteralTokenType {
     Unknown,
@@ -30,9 +30,9 @@ struct CharacterLiteralToken : Token {
     std::string toString() const override {
         std::string lexeme_str = "CharacterLiteralToken = {";
         lexeme_str += character_literal_token_type_to_string.at(character_type) + ", ";
-        lexeme_str += "\"" + lexeme_text + "\", ";
-        lexeme_str += "(" + std::to_string(line_number) + ", ";
-        lexeme_str += std::to_string(column_number) + ")}";
+        lexeme_str += "\"" + lexeme.text + "\", ";
+        lexeme_str += "(" + std::to_string(lexeme.location.line) + ", ";
+        lexeme_str += std::to_string(lexeme.location.column) + ")}";
         return lexeme_str;
     }
 };

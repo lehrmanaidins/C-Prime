@@ -6,7 +6,7 @@
 #include <stdexcept>
  
 #include "token.hpp"
-#include "../lexer_error.hpp"
+#include "../../error.hpp"
 
 enum class WhiteSpaceTokenType {
     Unknown,
@@ -40,24 +40,24 @@ struct WhiteSpaceToken : Token {
     {}
 
     static WhiteSpaceTokenType mapWhiteSpaceType(const Lexeme& lexeme) {
-        auto it = whitespace_map.find(lexeme.lexeme_text);
+        auto it = whitespace_map.find(lexeme.text);
         if (it != whitespace_map.end()) {
             return it->second;
         }
-        printLexemeError("unknown whitespace" + lexeme.lexeme_text, lexeme);
+        printError("unknown whitespace" + lexeme.text, lexeme);
         return WhiteSpaceTokenType::Unknown;
     }
 
     static bool isWhiteSpace(const Lexeme& lexeme) {
-        return whitespace_map.find(lexeme.lexeme_text) != whitespace_map.end();
+        return whitespace_map.find(lexeme.text) != whitespace_map.end();
     }
 
     std::string toString() const override {
         std::string lexeme_str = "WhiteSpaceToken = {";
         lexeme_str += whitespace_token_type_to_string.at(white_space_type) + ", ";
-        lexeme_str += "\"" + lexeme_text + "\", ";
-        lexeme_str += "(" + std::to_string(line_number) + ", ";
-        lexeme_str += std::to_string(column_number) + ")}";
+        lexeme_str += "\"" + lexeme.text + "\", ";
+        lexeme_str += "(" + std::to_string(lexeme.location.line) + ", ";
+        lexeme_str += std::to_string(lexeme.location.column) + ")}";
         return lexeme_str;
     }
 };

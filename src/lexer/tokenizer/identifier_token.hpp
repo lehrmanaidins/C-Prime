@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 #include "token.hpp"
-#include "../lexer_error.hpp"
+#include "../../error.hpp"
 
 enum class IdentifierTokenType {
     Unknown,
@@ -88,7 +88,7 @@ struct IdentifierToken : Token {
     {}
 
     static IdentifierTokenType mapIdentifierTokenType(const Lexeme& lexeme) {
-        auto it = identifier_map.find(lexeme.lexeme_text);
+        auto it = identifier_map.find(lexeme.text);
         if (it != identifier_map.end()) {
             return it->second;
         }
@@ -99,9 +99,9 @@ struct IdentifierToken : Token {
     std::string toString() const override {
         std::string lexeme_str = "IdentifierToken = {";
         lexeme_str += identifier_token_type_to_string.at(identifier_type) + ", ";
-        lexeme_str += "\"" + lexeme_text + "\", ";
-        lexeme_str += "(" + std::to_string(line_number) + ", ";
-        lexeme_str += std::to_string(column_number) + ")}";
+        lexeme_str += "\"" + lexeme.text + "\", ";
+        lexeme_str += "(" + std::to_string(lexeme.location.line) + ", ";
+        lexeme_str += std::to_string(lexeme.location.column) + ")}";
         return lexeme_str;
     }
 };

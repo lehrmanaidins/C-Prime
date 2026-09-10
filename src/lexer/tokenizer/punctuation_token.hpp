@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 #include "token.hpp"
-#include "../lexer_error.hpp"
+#include "../../error.hpp"
 
 enum class PunctuationTokenType {
     Unknown,
@@ -34,24 +34,24 @@ struct PunctuationToken : Token {
     {}
 
     static PunctuationTokenType mapPunctuationTokenType(const Lexeme& lexeme) {
-        auto it = punctuation_map.find(lexeme.lexeme_text);
+        auto it = punctuation_map.find(lexeme.text);
         if (it != punctuation_map.end()) {
             return it->second;
         }
-        printLexemeError("unknown punctuation" + lexeme.lexeme_text, lexeme);
+        printError("unknown punctuation" + lexeme.text, lexeme);
         return PunctuationTokenType::Unknown;
     }
 
     static bool isPunctuation(const Lexeme& lexeme) {
-        return punctuation_map.find(lexeme.lexeme_text) != punctuation_map.end();
+        return punctuation_map.find(lexeme.text) != punctuation_map.end();
     }
 
     std::string toString() const override {
         std::string lexeme_str = "PunctuationToken = {";
         lexeme_str += punctuation_token_type_to_string.at(punctuation_type) + ", ";
-        lexeme_str += "\"" + lexeme_text + "\", ";
-        lexeme_str += "(" + std::to_string(line_number) + ", ";
-        lexeme_str += std::to_string(column_number) + ")}";
+        lexeme_str += "\"" + lexeme.text + "\", ";
+        lexeme_str += "(" + std::to_string(lexeme.location.line) + ", ";
+        lexeme_str += std::to_string(lexeme.location.column) + ")}";
         return lexeme_str;
     }
 };

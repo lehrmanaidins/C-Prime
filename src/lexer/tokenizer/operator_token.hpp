@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 #include "token.hpp"
-#include "../lexer_error.hpp"
+#include "../../error.hpp"
 
 enum class OperatorTokenType {
     Unknown,
@@ -103,25 +103,25 @@ struct OperatorToken : Token {
     {}
 
     static OperatorTokenType mapOperatorTokenType(const Lexeme& lexeme) {
-        auto it = operator_map.find(lexeme.lexeme_text);
+        auto it = operator_map.find(lexeme.text);
         if (it != operator_map.end()) {
             return it->second;
         }
         
-        printLexemeError("unknown operator" + lexeme.lexeme_text, lexeme);
+        printError("unknown operator" + lexeme.text, lexeme);
         return OperatorTokenType::Unknown;
     }
 
     static bool isOperator(const Lexeme& lexeme) {
-        return operator_map.find(lexeme.lexeme_text) != operator_map.end();
+        return operator_map.find(lexeme.text) != operator_map.end();
     }
 
     std::string toString() const override {
         std::string lexeme_str = "OperatorToken = {";
         lexeme_str += operator_token_type_to_string.at(operator_type) + ", ";
-        lexeme_str += "\"" + lexeme_text + "\", ";
-        lexeme_str += "(" + std::to_string(line_number) + ", ";
-        lexeme_str += std::to_string(column_number) + ")}";
+        lexeme_str += "\"" + lexeme.text + "\", ";
+        lexeme_str += "(" + std::to_string(lexeme.location.line) + ", ";
+        lexeme_str += std::to_string(lexeme.location.column) + ")}";
         return lexeme_str;
     }
 };

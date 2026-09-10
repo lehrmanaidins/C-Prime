@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <cstddef>
 
+#include "../../source/source_location.hpp"
+
 enum class LexemeType {
     Unknown,
     Word,
@@ -31,18 +33,19 @@ static const std::unordered_map<LexemeType, std::string> lexeme_type_to_string {
 
 struct Lexeme {
     LexemeType type;
-    std::string lexeme_text;
+    std::string text;
     std::string filename;
-    std::string line_text;
-    std::size_t line_number;
-    std::size_t column_number;
+    std::string source_line_text;
+    SourceLocation location;
 
     std::string toString() const {
         std::string lexeme_str = "Lexeme = {";
         lexeme_str += lexeme_type_to_string.at(type) + ", ";
-        lexeme_str += "\"" + lexeme_text + "\", ";
-        lexeme_str += "(" + filename + ", " + std::to_string(line_number) + ", ";
-        lexeme_str += std::to_string(column_number) + ")}";
+        lexeme_str += "\"" + text + "\", ";
+        lexeme_str += "(" + filename + ", " + std::to_string(location.line) + ", ";
+        lexeme_str += std::to_string(location.column) + ", ";
+        lexeme_str += "\"" + source_line_text + "\")";
+        lexeme_str += "}";
         return lexeme_str;
     }
 };
